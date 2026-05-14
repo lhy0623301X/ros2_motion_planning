@@ -1,0 +1,166 @@
+path_planner {
+    convert_offset: 0.0
+    default_tolerance: 0.0
+    expand_zone: true
+    show_safety_corridor: false
+    enable_resample: false
+    resample_ratio: 0.5
+    obstacle_inflation_factor: 0.5
+    is_outline_map: true
+
+    graph_planner {
+        hybrid_astar_planner {
+            motion_model: DUBINS_UNSPECIFIED
+            goal_tolerance: 0.125
+            dim_3_size: 64
+            max_iterations: 1000000
+            max_approach_iterations: 1000
+            traverse_unknown: false
+            curve_sample_ratio: 0.15
+            minimum_turning_radius: 0.4
+            non_straight_penalty: 1.20
+            change_penalty: 0.0
+            reverse_penalty: 2.1
+            retrospective_penalty: 0.025
+            lookup_table_dim: 20
+            analytic_expansion_ratio: 3.5
+            analytic_expansion_max_length: 3.0
+            lamda_h: 2.5
+            default_graph_size: 100000
+        }
+    }
+
+    sample_planner {
+        sample_points: 1500
+        sample_max_distance: 30.0
+        optimization_radius: 20.0
+        optimization_sampe_probability: 0.05
+    }
+
+    evolutionary_planner {
+        init_mode: EVOLUTIONARY_INIT_MODE_RANDOM_IN_CIRCLE
+
+        aco_planner {
+            population_num: 50
+            inherited_num: 20
+            control_point_num: 5
+            alpha: 1.0
+            beta: 8.0
+            rho: 0.1
+            Q: 1.0
+            max_iterations: 5
+        }
+
+        pso_planner {
+            population_num: 50
+            inherited_num: 20
+            control_point_num: 5
+            max_speed: 40.0
+            weight_inertial: 1.0
+            weight_social: 2.0
+            weight_cognitive: 1.2
+            max_iterations: 5
+        }
+
+        ga_planner {
+            population_num: 50
+            inherited_num: 20
+            control_point_num: 5
+            max_speed: 40.0
+            prob_selection: 0.5
+            prob_crossover: 0.8
+            prob_mutation: 0.3
+            max_iterations: 5
+        }
+    }
+}
+
+controller {
+    control_frequency: 10.0 # Hz
+    base_frame: "base_link"
+    odom_frame: "odom"
+    map_frame: "map"
+    goal_dist_tolerance: 0.3
+    rotate_tolerance: 0.5
+    max_linear_velocity: 0.5    # m / s
+    min_linear_velocity: 0.0
+    max_linear_velocity_increment: 0.5
+    max_angular_velocity: 1.5   # rad / s
+    min_angular_velocity: 0.0
+    max_angular_velocity_increment: 1.5
+
+    rpp_controller {
+        lookahead_time: 1.5
+        min_lookahead_dist: 0.3
+        max_lookahead_dist: 0.9
+        regulated_min_radius: 0.9
+        inflation_cost_factor: 3.0
+        scaling_dist: 0.6
+        scaling_gain: 1.0
+        approach_dist: 0.8
+        approach_min_v: 0.1
+    }
+
+    lqr_controller {
+        lookahead_time: 1.0
+        min_lookahead_dist: 0.3
+        max_lookahead_dist: 0.9
+        solver_max_iterations: 100
+        solver_eps: 0.1
+        Q_matrix_x: 1.0
+        Q_matrix_y: 1.0
+        Q_matrix_theta: 1.0
+        R_matrix_v: 1.0
+        R_matrix_w: 1.0
+    }
+
+    pid_controller {
+        lookahead_time: 0.5
+        min_lookahead_dist: 0.3
+        max_lookahead_dist: 0.9
+        p_linear_velocity: 1.00
+        i_linear_velocity: 0.10
+        d_linear_velocity: 0.10
+        p_angular_velocity: 1.00
+        i_angular_velocity: 0.10
+        d_angular_velocity: 0.10
+        theta_weight: 0.7
+        k_feedback: 1.0
+        dist_from_center_to_front_edge: 0.2
+        model_based_mode: true
+    }
+
+    mpc_controller {
+        lookahead_time: 1.0
+        min_lookahead_dist: 0.3
+        max_lookahead_dist: 0.9
+        predict_time_domain: 12
+        control_time_domain: 8
+        Q_matrix_x: 1.0
+        Q_matrix_y: 1.0
+        Q_matrix_theta: 1.0
+        R_matrix_v: 1.0
+        R_matrix_w: 1.0
+        delta_linear_velocity_min: -0.2
+        delta_linear_velocity_max: 0.2
+        delta_angular_velocity_min: -0.2
+        delta_angular_velocity_max: 3.14
+    }
+
+    apf_controller {
+        lookahead_time: 1.0
+        min_lookahead_dist: 0.3
+        max_lookahead_dist: 0.9
+        smooth_window: 5
+        weight_attractive_force: 1.0
+        weight_repulsive_force: 3.0
+    }
+
+    orca_controller {
+        neighbor_distance: 3.0
+        time_horizon: 3.0
+        time_horizon_obstacles: 1.0
+        agent_radius: 0.15
+        max_neighbors: 5
+    }
+}

@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package rmp.pb.path_planner;
+
+import "system_config/path_planner_protos/sample_planner/rrt_planner.proto";
+import "system_config/path_planner_protos/sample_planner/rrt_star_planner.proto";
+import "system_config/path_planner_protos/sample_planner/rrt_connect_planner.proto";
+import "system_config/path_planner_protos/sample_planner/informed_rrt_planner.proto";
+
+message SamplePathPlanner {
+    // random sample points
+    int64 sample_points = 1;
+    // max distance between sample points
+    double sample_max_distance = 2;
+    // optimization radius
+    double optimization_radius = 3;
+    // optimized sample probability
+    double optimization_sampe_probability = 4;
+
+    RRTPlanner rrt_planner = 10;
+    RRTStarPlanner rrt_star_planner = 11;
+    RRTConnectPlanner rrt_connect_planner = 12;
+    InformedRRTPlanner informed_rrt_planner = 13;
+}
