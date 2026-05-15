@@ -22,7 +22,7 @@ nav_msgs::msg::Path PathPlanner::createPlan(
   const geometry_msgs::msg::PoseStamped & start,
   const geometry_msgs::msg::PoseStamped & goal)
 {
-  auto logger = rclcpp::get_logger("path_planner");
+  clearDebugInfo();
 
   // 步骤 1：如果上一帧路径存在，先判断能否直接复用上一帧路径。
   if (config_.enable_path_reuse && !last_path_.empty()) {
@@ -37,17 +37,8 @@ nav_msgs::msg::Path PathPlanner::createPlan(
         last_path_.begin() + static_cast<std::ptrdiff_t>(replanning_decision.nearest_index),
         last_path_.end());
       last_path_ = reused_path;
-      RCLCPP_INFO(
-        logger,
-        "复用上一帧路径，不触发重规划。nearest_index=%zu, remaining_points=%zu",
-        replanning_decision.nearest_index, reused_path.size());
       return toNavPath(reused_path, goal.header.frame_id, goal.header.stamp);
     }
-
-    RCLCPP_INFO(
-      logger,
-      "上一帧路径不可复用，执行重规划。nearest_index=%zu",
-      replanning_decision.nearest_index);
   }
 
   // 步骤 3：若不存在可复用路径，则调用具体规划算法重新搜索新路径。
@@ -76,6 +67,11 @@ const PathPlannerConfig & PathPlanner::config() const
 void PathPlanner::setConfig(const PathPlannerConfig & config)
 {
   config_ = config;
+}
+
+const common::util::PlannerDebugInfo & PathPlanner::debugInfo() const
+{
+  return debug_info_;
 }
 
 nav2_costmap_2d::Costmap2D * PathPlanner::getCostMap() const
@@ -207,6 +203,16 @@ int PathPlanner::getSizeInCellsX() const
 int PathPlanner::getSizeInCellsY() const
 {
   return costmap_ ? static_cast<int>(costmap_->getSizeInCellsY()) : 0;
+}
+
+common::util::PlannerDebugInfo & PathPlanner::mutableDebugInfo()
+{
+  return debug_info_;
+}
+
+void PathPlanner::clearDebugInfo()
+{
+  debug_info_.clear();
 }
 
 }  // namespace rmp::path_planner

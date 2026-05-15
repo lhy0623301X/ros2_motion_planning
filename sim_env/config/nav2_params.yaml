@@ -3,6 +3,10 @@
 # Uses Nav2 built-in planners/controllers; custom plugins replace these in Phase 2.
 # =============================================================================
 
+/**:
+  ros__parameters:
+    enable_debug_visualization: true   # 整个项目的算法调试可视化总开关
+
 # -----------------------------------------------------------------------------
 # AMCL — 自适应蒙特卡洛定位（粒子滤波器）
 # 根据激光雷达数据和已知地图估计机器人的位姿

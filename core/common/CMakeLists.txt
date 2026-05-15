@@ -21,7 +21,7 @@ file(GLOB math_src_files_cpp src/math/*.cpp)
 file(GLOB geometry_src_files src/geometry/*.cpp)
 file(GLOB geometry_curve_src_files src/geometry/curve/*.cpp)
 
-add_library(${PROJECT_NAME}
+add_library(${PROJECT_NAME} SHARED
   ${util_src_files}
   ${math_src_files_cpp}
   ${geometry_src_files}
@@ -30,7 +30,9 @@ add_library(${PROJECT_NAME}
 
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   $<INSTALL_INTERFACE:include>
+  $<INSTALL_INTERFACE:include/common>
   ${EIGEN3_INCLUDE_DIR}
 )
 
@@ -48,6 +50,12 @@ ament_target_dependencies(${PROJECT_NAME}
 install(
   DIRECTORY include/
   DESTINATION include
+)
+
+install(
+  DIRECTORY src/
+  DESTINATION include/common
+  FILES_MATCHING PATTERN "*.h"
 )
 
 install(
@@ -71,6 +79,7 @@ ament_export_dependencies(
   Eigen3
 )
 ament_export_include_directories(include)
+ament_export_include_directories(include/common)
 ament_export_libraries(${PROJECT_NAME})
 
 ament_package()

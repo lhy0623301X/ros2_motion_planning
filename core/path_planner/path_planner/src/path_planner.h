@@ -14,6 +14,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav2_costmap_2d/nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "nav_msgs/msg/path.hpp"
+#include "util/planner_visualization.h"
 
 namespace rmp::path_planner {
 
@@ -35,6 +36,7 @@ struct PathPlannerConfig
   double obstacle_sigmoid_center{0.35};
   double replanning_distance{0.5};
   bool enable_path_reuse{true};
+  bool enable_debug_visualization{true};
   bool outline_map{false};
 };
 
@@ -56,6 +58,7 @@ public:
 
   const PathPlannerConfig & config() const;
   void setConfig(const PathPlannerConfig & config);
+  const common::util::PlannerDebugInfo & debugInfo() const;
   nav2_costmap_2d::Costmap2D * getCostMap() const;
   int getMapSize() const;
   int grid2Index(int x, int y) const;
@@ -98,10 +101,13 @@ protected:
 
   int getSizeInCellsX() const;
   int getSizeInCellsY() const;
+  common::util::PlannerDebugInfo & mutableDebugInfo();
+  void clearDebugInfo();
 
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
   nav2_costmap_2d::Costmap2D * costmap_;
   PathPlannerConfig config_;
+  common::util::PlannerDebugInfo debug_info_;
   Points3d last_path_;
 };
 

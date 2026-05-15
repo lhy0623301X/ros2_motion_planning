@@ -32,6 +32,8 @@ bool PathPlannerFactory::createPlanner(
     plugin_name + ".replanning_distance", config.replanning_distance);
   config.enable_path_reuse = node->declare_parameter<bool>(
     plugin_name + ".enable_path_reuse", config.enable_path_reuse);
+  config.enable_debug_visualization = node->declare_parameter<bool>(
+    "enable_debug_visualization", config.enable_debug_visualization);
   config.outline_map = node->declare_parameter<bool>(
     plugin_name + ".outline_map", config.outline_map);
 

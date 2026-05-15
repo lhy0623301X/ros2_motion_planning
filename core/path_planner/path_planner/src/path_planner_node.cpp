@@ -28,6 +28,7 @@ void PathPlannerNode::configure(
 
   logger_ = node->get_logger();
   global_frame_ = costmap_ros_ ? costmap_ros_->getGlobalFrameID() : std::string{};
+  visualizer_ = std::make_unique<common::util::PlannerVisualizer>(node, name_ + "/debug_markers");
 
   PathPlannerFactory::PlannerProps props;
   const bool created =
@@ -48,6 +49,7 @@ void PathPlannerNode::configure(
 void PathPlannerNode::cleanup()
 {
   planner_.reset();
+  visualizer_.reset();
   costmap_ros_.reset();
   tf_.reset();
 }
@@ -82,7 +84,12 @@ nav_msgs::msg::Path PathPlannerNode::createPlan(
     return makeEmptyPlan(start, goal);
   }
 
-  return planner_->createPlan(start, goal);
+  auto plan = planner_->createPlan(start, goal);
+  if (visualizer_ && planner_->config().enable_debug_visualization) {
+    const double resolution = costmap_ros_ ? costmap_ros_->getCostmap()->getResolution() : 0.05;
+    visualizer_->publish(planner_->debugInfo(), global_frame_, goal.header.stamp, resolution);
+  }
+  return plan;
 }
 
 nav_msgs::msg::Path PathPlannerNode::makeEmptyPlan(

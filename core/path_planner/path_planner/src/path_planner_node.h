@@ -48,6 +48,7 @@ private:
   std::string name_;
   std::string global_frame_;
   PlannerType planner_type_{kNoPlanner};
+  std::unique_ptr<common::util::PlannerVisualizer> visualizer_;
   rclcpp::Logger logger_{rclcpp::get_logger("path_planner")};
 };
 
