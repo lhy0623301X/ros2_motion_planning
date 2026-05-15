@@ -4,7 +4,9 @@
  */
 #include "utils/path_planner_factory.h"
 
+#include "graph_planner/astar_planner.h"
 #include "graph_planner/dijkstra_planner.h"
+#include "graph_planner/gbfs_planner.h"
 
 namespace rmp::path_planner {
 
@@ -39,9 +41,19 @@ bool PathPlannerFactory::createPlanner(
   config.outline_map = node->declare_parameter<bool>(
     plugin_name + ".outline_map", config.outline_map);
 
+  std::shared_ptr<PathPlanner> planner;
+
   if (planner_props.planner_name == "dijkstra") {
-    planner_props.planner_ptr = std::make_shared<DijkstraPathPlanner>(std::move(costmap_ros));
-    planner_props.planner_ptr->setConfig(config);
+    planner = std::make_shared<DijkstraPathPlanner>(costmap_ros);
+  } else if (planner_props.planner_name == "astar") {
+    planner = std::make_shared<AStarPathPlanner>(costmap_ros);
+  } else if (planner_props.planner_name == "gbfs") {
+    planner = std::make_shared<GBFSPathPlanner>(costmap_ros);
+  }
+
+  if (planner) {
+    planner->setConfig(config);
+    planner_props.planner_ptr = planner;
     planner_props.planner_type = kGraphPlanner;
     RCLCPP_INFO(node->get_logger(), "Using migrated planner '%s'.", planner_props.planner_name.c_str());
     return true;
