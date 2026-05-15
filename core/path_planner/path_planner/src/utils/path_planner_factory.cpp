@@ -28,6 +28,10 @@ bool PathPlannerFactory::createPlanner(
     plugin_name + ".obstacle_sigmoid_alpha", config.obstacle_sigmoid_alpha);
   config.obstacle_sigmoid_center = node->declare_parameter<double>(
     plugin_name + ".obstacle_sigmoid_center", config.obstacle_sigmoid_center);
+  config.replanning_distance = node->declare_parameter<double>(
+    plugin_name + ".replanning_distance", config.replanning_distance);
+  config.enable_path_reuse = node->declare_parameter<bool>(
+    plugin_name + ".enable_path_reuse", config.enable_path_reuse);
   config.outline_map = node->declare_parameter<bool>(
     plugin_name + ".outline_map", config.outline_map);
 

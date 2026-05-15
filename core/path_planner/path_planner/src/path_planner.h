@@ -6,6 +6,7 @@
 #define RMP_PATH_PLANNER_PATH_PLANNER_H_
 
 #include <memory>
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -32,6 +33,8 @@ struct PathPlannerConfig
   double obstacle_cost_weight{3.0};
   double obstacle_sigmoid_alpha{10.0};
   double obstacle_sigmoid_center{0.35};
+  double replanning_distance{0.5};
+  bool enable_path_reuse{true};
   bool outline_map{false};
 };
 
@@ -99,6 +102,7 @@ protected:
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
   nav2_costmap_2d::Costmap2D * costmap_;
   PathPlannerConfig config_;
+  Points3d last_path_;
 };
 
 }  // namespace rmp::path_planner

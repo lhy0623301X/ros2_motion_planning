@@ -8,6 +8,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "tf2/LinearMath/Quaternion.h"
+#include "utils/path_replanning_utils.h"
 
 namespace rmp::path_planner {
 
@@ -21,6 +22,35 @@ nav_msgs::msg::Path PathPlanner::createPlan(
   const geometry_msgs::msg::PoseStamped & start,
   const geometry_msgs::msg::PoseStamped & goal)
 {
+  auto logger = rclcpp::get_logger("path_planner");
+
+  // 步骤 1：如果上一帧路径存在，先判断能否直接复用上一帧路径。
+  if (config_.enable_path_reuse && !last_path_.empty()) {
+    const auto replanning_decision = utils::shouldReplan(
+      {start.pose.position.x, start.pose.position.y, 0.0},
+      last_path_, costmap_, config_);
+
+    // 步骤 2：若当前位置仍贴近上一帧路径，且剩余路径未被阻挡，
+    // 就从最近点开始截取剩余路径，直接作为当前规划结果输出。
+    if (!replanning_decision.need_replanning) {
+      Points3d reused_path(
+        last_path_.begin() + static_cast<std::ptrdiff_t>(replanning_decision.nearest_index),
+        last_path_.end());
+      last_path_ = reused_path;
+      RCLCPP_INFO(
+        logger,
+        "复用上一帧路径，不触发重规划。nearest_index=%zu, remaining_points=%zu",
+        replanning_decision.nearest_index, reused_path.size());
+      return toNavPath(reused_path, goal.header.frame_id, goal.header.stamp);
+    }
+
+    RCLCPP_INFO(
+      logger,
+      "上一帧路径不可复用，执行重规划。nearest_index=%zu",
+      replanning_decision.nearest_index);
+  }
+
+  // 步骤 3：若不存在可复用路径，则调用具体规划算法重新搜索新路径。
   Points3d path;
   Points3d expand;
   const bool found = plan(
@@ -29,9 +59,12 @@ nav_msgs::msg::Path PathPlanner::createPlan(
     &path, &expand);
 
   if (!found) {
+    last_path_.clear();
     return nav_msgs::msg::Path{};
   }
 
+  // 步骤 4：保存本次新生成的路径，供下一帧判断是否需要重规划。
+  last_path_ = path;
   return toNavPath(path, goal.header.frame_id, goal.header.stamp);
 }
 
