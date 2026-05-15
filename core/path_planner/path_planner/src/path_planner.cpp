@@ -76,12 +76,6 @@ bool PathPlanner::world2Map(double wx, double wy, double & mx, double & my) cons
     return false;
   }
 
-  RCLCPP_INFO(
-    logger,
-    "world2Map 输入: world=(%.3f, %.3f), origin=(%.3f, %.3f), resolution=%.3f, size=(%d, %d)",
-    wx, wy, costmap_->getOriginX(), costmap_->getOriginY(),
-    costmap_->getResolution(), getSizeInCellsX(), getSizeInCellsY());
-
   if (wx < costmap_->getOriginX() || wy < costmap_->getOriginY()) {
     RCLCPP_WARN(
       logger,
@@ -93,11 +87,6 @@ bool PathPlanner::world2Map(double wx, double wy, double & mx, double & my) cons
   mx = (wx - costmap_->getOriginX()) / costmap_->getResolution();
   my = (wy - costmap_->getOriginY()) / costmap_->getResolution();
   const bool in_bounds = mx < getSizeInCellsX() && my < getSizeInCellsY();
-
-  RCLCPP_INFO(
-    logger,
-    "world2Map 结果: map=(%.3f, %.3f), in_bounds=%s",
-    mx, my, in_bounds ? "true" : "false");
 
   if (!in_bounds) {
     RCLCPP_WARN(
@@ -145,11 +134,6 @@ bool PathPlanner::validityCheck(double wx, double wy, double & mx, double & my) 
 {
   auto logger = rclcpp::get_logger("path_planner");
   const bool valid = world2Map(wx, wy, mx, my);
-
-  RCLCPP_INFO(
-    logger,
-    "validityCheck: world=(%.3f, %.3f) -> map=(%.3f, %.3f), valid=%s",
-    wx, wy, mx, my, valid ? "true" : "false");
 
   return valid;
 }
