@@ -1,6 +1,27 @@
 # 图搜索全局规划算法分析
 
-本文档介绍项目中已迁移的七种图搜索全局路径规划算法，以统一的伪代码形式呈现核心逻辑，并分析各算法的特性。
+本文档介绍项目中已迁移的八种全局路径规划算法，以统一的伪代码形式呈现核心逻辑，并分析各算法的特性。
+
+## 算法总览对比
+
+| 算法 | 最优性 | 完备性 | 搜索方向 | 搜索空间 | 时间效率 | 核心优势 | 核心劣势 | 典型应用场景 |
+|------|--------|--------|----------|----------|----------|----------|----------|-------------|
+| **GBFS** | ✗ | ✓ | 正向 | 2D 栅格 | ★★★★★ | 极快，扩展量最少 | 不保证最优，无法利用代价地图 | 大地图快速预览路径、实时性要求极高的场景 |
+| **Dijkstra** | ✓ | ✓ | 正向 | 2D 栅格 | ★★☆☆☆ | 全局最优，无启发式偏差 | 圆形全向扩散，大地图效率低 | 需要严格最优路径的小/中型地图 |
+| **A\*** | ✓ | ✓ | 正向 | 2D 栅格 | ★★★★☆ | 兼顾最优性与效率 | 高障碍密度时退化接近 Dijkstra | **通用首选**，全向底盘导航 |
+| **JPS** | ✓ | ✓ | 正向 | 2D 栅格 | ★★★★★ | A\* 的加速版，跳过对称路径 | 仅适用于均匀代价网格 | 大型均匀代价地图（游戏地图、开阔仓库） |
+| **D\*** | ✓ | ✓ | 反向 | 2D 栅格 | 首次★★☆ 增量★★★★ | 增量重规划，地图变化仅局部修复 | 实现复杂，内存开销大 | 未知/动态环境中的持续导航 |
+| **D\* Lite** | ✓ | ✓ | 反向 | 2D 栅格 | 首次★★☆ 增量★★★★ | D\* 的简化替代，逻辑更清晰 | 内存开销同 D\*，路径提取可能不稳定 | 动态环境导航（推荐替代 D\*） |
+| **LPA\*** | ✓ | ✓ | 正向 | 2D 栅格 | 首次★★☆ 增量★★★★ | 正向增量搜索，概念直觉 | 起点变化必须完全重置 | 起点固定、地图动态变化（固定基站规划） |
+| **Hybrid A\*** | 近似 | ✓ | 正向 | 3D (x,y,θ) | ★★★☆☆ | 输出运动学可行路径，无需后平滑 | 计算量大，参数敏感 | 阿克曼转向车辆、无人车、有转弯半径约束的机器人 |
+
+**选型建议**：
+- **全向底盘 + 静态地图** → A\*（平衡性最佳）或 JPS（均匀代价地图加速）
+- **全向底盘 + 动态地图** → D\* Lite（增量重规划效率最高）
+- **非完整约束车辆**（阿克曼转向） → Hybrid A\*（唯一直接输出运动学可行路径的算法）
+- **快速原型 / 实时预览** → GBFS（牺牲最优性换极致速度）
+
+---
 
 > **符号约定**
 > - `g(n)` — 从起点到节点 n 的累计路径代价
@@ -660,7 +681,289 @@ function LPAStar_Replan(changed_cells):
 
 ---
 
-## 七算法搜索行为直觉图
+## 8. Hybrid A\*（混合 A\*）
+
+### 核心思想
+
+> Hybrid A\* 将标准 A\* 从离散 2D 网格扩展到 3D 连续状态空间 (x, y, θ)。搜索节点不再对齐于栅格中心，而是携带精确朝向角，邻居扩展由车辆运动学原语（Dubins 曲线段）驱动。启发式函数由两层互补估计的最大值构成，保证可接受性（admissible）的同时兼顾障碍物绕行代价与转弯半径约束。
+
+### 与 2D 图搜索算法的根本区别
+
+```
+2D 算法（Dijkstra / A* / GBFS / JPS / D* / D* Lite / LPA*）：
+  - 搜索空间：2D 栅格 (x, y)，节点对齐于像素中心
+  - 邻域模型：4-连通或 8-连通，运动方向 = 网格方向
+  - 假设：全向移动，无朝向约束
+  - 路径特征：折线段，转弯为 45°/90° 整数角
+
+Hybrid A*：
+  - 搜索空间：3D 连续 (x, y, θ)，朝向角量化为 N 个 bin
+  - 邻域模型：运动原语（直行/左转/右转），由 Dubins 曲线生成
+  - 假设：非完整约束（最小转弯半径），有前进/后退方向
+  - 路径特征：平滑弧线段，天然可执行的运动学轨迹
+```
+
+### 关键概念
+
+**运动原语（Motion Primitives）**：从当前位姿出发，沿 Dubins 曲线采样生成一组固定模式的短弧段（直行、左转、右转及其反向），每条弧段的终点即为一个候选后继节点。
+
+```
+当前位姿 (x, y, θ)
+        │
+        ├──→  直行：沿 θ 方向前进固定弧长
+        ├──↗  左转：沿最小转弯半径左弧前进
+        ├──↘  右转：沿最小转弯半径右弧前进
+        ├──←  倒车直行（可选）
+        ├──↖  倒车左转（可选）
+        └──↙  倒车右转（可选）
+```
+
+**双层启发式**：
+
+```
+h(n) = max( h_obstacle(n), h_distance(n) )
+         │                    │
+         │                    └── Dubins 曲线长度：
+         │                        考虑最小转弯半径，忽略障碍物
+         │
+         └── 2D Dijkstra 代价场：
+             从目标反向扩散，忽略朝向，考虑障碍物
+
+取 max 保证不高估（admissible），同时充分利用两种互补信息。
+```
+
+**Analytic Expansion**：当搜索前沿距目标足够近（< `analytic_expansion_max_length`）时，尝试用 Dubins 曲线直接从当前节点连接到目标。如果曲线无碰撞，则直接完成搜索，跳过最后阶段的逐步扩展，大幅加速收敛。
+
+**3D 索引量化**：
+
+```
+将连续 (x, y, θ) 映射为单一整数 index：
+  θ_bin = round(θ / (2π / N))       // N = dim_3_size，默认 72（5°/bin）
+  index = θ_bin + x × N + y × map_width × N
+
+解码（index → pose）：
+  θ_bin = index mod N
+  x = (index / N) mod map_width
+  y = index / (N × map_width)
+```
+
+### 伪代码
+
+```
+// =====================================================================
+// 预计算阶段：障碍启发式（从目标反向 Dijkstra）
+// =====================================================================
+function PrecomputeObstacleHeuristic(goal):
+    h_map[goal.x][goal.y] ← 0
+    所有其他格 ← ∞
+    queue ← MinHeap
+    queue.push(0, goal)
+
+    while queue is not empty:
+        cost, (x, y) ← queue.pop()
+
+        for each motion in GRID_MOTIONS_8:        // 标准 8-连通
+            nx, ny ← x + motion.dx, y + motion.dy
+            if (nx, ny) 越界 OR 是障碍物:          continue
+            new_cost ← cost + motion.cost
+            if new_cost < h_map[ny][nx]:
+                h_map[ny][nx] ← new_cost
+                queue.push(new_cost, (nx, ny))
+
+    return h_map                                   // 二维代价场
+
+
+// =====================================================================
+// 主搜索：Hybrid A*
+// =====================================================================
+function HybridAStar(start, goal):
+    // ---- 初始化 ----
+    graph ← {}                                     // 3D 索引 → NodeHybrid
+    open_list ← MinHeap sorted by f
+    h_map ← PrecomputeObstacleHeuristic(goal)
+
+    start_node ← addToGraph(getIndex(start))
+    goal_node  ← addToGraph(getIndex(goal))
+    start_node.g ← 0
+    open_list.push(0, start_node)
+    best_approach ← (∞, null)                      // 记录距目标最近的节点
+
+    iterations ← 0
+
+    // ---- 主循环 ----
+    while iterations < MAX_ITERATIONS AND open_list is not empty:
+        current ← open_list.pop()
+
+        if current.visited:   continue
+        current.visited ← true
+        iterations += 1
+
+        // ---- Analytic Expansion（Dubins 直连尝试） ----
+        if h(current, goal) < analytic_expansion_max_length / resolution:
+            dubins_path ← DubinsCurve(current.pose, goal.pose)
+            if dubins_path 存在 AND 全程无碰撞:
+                将 dubins_path 上的节点串入 parent 链
+                goal_node.parent ← 曲线末端
+                return BacktracePath(goal_node)     ✓ 搜索完成
+
+        // ---- 检查是否到达目标 ----
+        if current == goal_node:
+            return BacktracePath(goal_node)          ✓ 搜索完成
+
+        // ---- 记录最近逼近节点（用于 MAX_APPROACH_ITERATIONS 保护） ----
+        h_val ← Heuristic(current, goal)
+        if h_val < best_approach.first:
+            best_approach ← (h_val, current)
+
+        // ---- 扩展邻居（运动原语） ----
+        motion_primitives ← MotionTable.getMotionPrimitives(current.pose)
+
+        for i, primitive in enumerate(motion_primitives):
+            new_pose ← primitive 的终点位姿
+            index ← getIndex(new_pose)
+            neighbor ← addToGraph(index)
+
+            if neighbor.visited:                    continue
+            if IsCollision(new_pose):               continue
+
+            neighbor.pose ← new_pose
+            neighbor.motion_index ← i
+            neighbor.turn_dir ← primitive.turn_dir
+
+            // ---- 计算行驶代价 ----
+            //   travel_cost = 弧长                              （基础代价）
+            //               + non_straight_penalty               （非直行惩罚）
+            //               + change_penalty                     （方向切换惩罚）
+            //               + reverse_penalty                    （倒车惩罚）
+            //               + retrospective_penalty × cell_cost  （代价地图叠加）
+            traversal ← current.getTraversalCost(neighbor, MotionTable)
+            g_new ← current.g + traversal
+
+            if g_new < neighbor.g:
+                neighbor.g ← g_new
+                neighbor.parent ← current
+                f ← g_new + λ_h × Heuristic(neighbor, goal)
+                open_list.push(f, neighbor)
+
+    // ---- 搜索耗尽：返回最近可达路径 ----
+    if best_approach.first < goal_tolerance:
+        return BacktracePath(best_approach.second)
+
+    return FAILURE
+
+
+// =====================================================================
+// 启发式函数
+// =====================================================================
+function Heuristic(node, goal):
+    h_obstacle ← h_map[node.y][node.x]            // 预计算的 2D Dijkstra 场
+    h_distance ← DubinsCurveLength(node.pose, goal.pose)  // 考虑转弯半径
+    return max(h_obstacle, h_distance)
+
+
+// =====================================================================
+// 行驶代价计算（节点转移代价）
+// =====================================================================
+function GetTraversalCost(parent, child, motion_table):
+    primitive ← motion_table.projections[child.motion_index]
+    travel_cost ← primitive.travel_cost             // 弧长（直行 ≈ 1.0）
+
+    // 非直行惩罚
+    if child.turn_dir ≠ FORWARD:
+        travel_cost *= non_straight_penalty
+
+    // 方向切换惩罚（如从左转变为右转）
+    if parent.turn_dir ≠ UNKNOWN AND parent.turn_dir ≠ child.turn_dir:
+        travel_cost += change_penalty
+
+    // 倒车惩罚
+    if child.turn_dir ∈ {REVERSE, REV_LEFT, REV_RIGHT}:
+        travel_cost *= reverse_penalty
+
+    // 代价地图叠加惩罚（邻近障碍物区域代价更高）
+    cell_cost ← costmap[child.x][child.y]
+    travel_cost += retrospective_penalty × cell_cost
+
+    return travel_cost
+
+
+// =====================================================================
+// Analytic Expansion 详细流程
+// =====================================================================
+function TryAnalyticExpansion(current, goal):
+    // 步骤 1：距离门控 — 太远则跳过
+    if Heuristic(current, goal) > threshold:
+        return null
+
+    // 步骤 2：生成 Dubins 曲线
+    dubins_path ← DubinsCurve.generate(current.pose, goal.pose)
+    if dubins_path 为空:
+        return null
+
+    // 步骤 3：逐点碰撞检查
+    prev ← current
+    for each waypoint in dubins_path[1:-1]:
+        waypoint.θ_bin ← quantize(waypoint.θ)
+        if IsCollision(waypoint):
+            return null                             // 曲线有碰撞，放弃
+        node ← new NodeHybrid(getIndex(waypoint))
+        node.pose ← waypoint
+        node.parent ← prev
+        prev ← node
+
+    // 步骤 4：成功 — 将目标节点接入链
+    goal.parent ← prev
+    return goal
+```
+
+### 行驶代价惩罚机制详解
+
+Hybrid A\* 的代价函数不仅考虑弧长，还通过多个惩罚项引导路径质量：
+
+```
+ 代价组成                   作用
+ ─────────────────────────────────────────────────
+ 弧长 (travel_cost)         基础移动代价
+ 非直行惩罚 (×1.2)          鼓励直行，减少不必要的转弯
+ 方向切换惩罚 (+0.0)        抑制频繁左右摆动（默认关闭）
+ 倒车惩罚 (×2.0)            优先前进，倒车代价翻倍
+ 代价地图叠加 (+0.015×c)    远离障碍物，安全裕度更高
+```
+
+### 算法亮点
+
+- **运动学可行路径**：输出的路径天然满足最小转弯半径约束，无需后处理平滑
+- **双层启发式互补**：障碍启发感知障碍物分布，距离启发感知运动学约束，取 max 后信息量远超单一启发式
+- **Analytic Expansion 加速**：在最后阶段用 Dubins 曲线直接连到目标，避免搜索最后几步的大量无效扩展
+- **预计算 2D Dijkstra**：障碍启发函数仅需一次反向 Dijkstra 即可获得全图代价场，后续查表 O(1)
+- **多维度惩罚体系**：通过非直行、方向切换、倒车、代价地图叠加四个惩罚项，精细控制路径行为
+- **路径复用机制**：目标不变且旧路径无碰撞时，截取最近点后直接复用，避免重复搜索
+
+### 与 2D A\* 的对比
+
+```
+                    2D A*                           Hybrid A*
+ ─────────────────────────────────────────────────────────────────
+ 搜索空间          (x, y)                         (x, y, θ)
+ 邻居数量          8 个（网格连通）                 3~6 个（运动原语）
+ 节点索引          y × width + x                   θ_bin + x × N + y × W × N
+ 启发式            欧几里得距离                     max(2D Dijkstra, Dubins 长度)
+ 路径特征          锯齿折线                         平滑弧线
+ 运动学约束        无                               最小转弯半径
+ 适用场景          全向移动底盘                     阿克曼转向车辆、无人车
+ 计算复杂度        O(V log V)                       O(V × P × log V)，P = 原语数
+```
+
+### 局限
+
+- **计算复杂度高**：3D 搜索空间 + Dubins 曲线生成 + 预计算 Dijkstra，单次规划耗时远高于 2D 算法
+- **内存消耗大**：3D 索引空间 = width × height × N，以及预计算的 2D 代价场
+- **参数敏感**：转弯半径、各惩罚系数、Analytic Expansion 距离阈值等需要根据车辆特性仔细调优
+- **非全局最优**：由于朝向量化和运动原语离散化，Hybrid A\* 找到的是近似最优路径，而非严格最优
+
+---
+
+## 八算法搜索行为直觉图
 
 以下是同一地图上各算法的典型搜索范围示意（S = 起点，G = 终点，灰色 = 扩展区域）：
 
@@ -689,4 +992,18 @@ function LPAStar_Replan(changed_cells):
    跳点稀疏分布             首次全图 + 增量局部
    扩展节点: ~50           首次: ~2000, 增量: ~50
    路径质量: 最优           路径质量: 最优
+
+
+  Hybrid A*
+  ┌──────────────────────┐
+  │    ·  ·              │
+  │   · ·  ·  ·          │    搜索空间为 3D (x, y, θ)
+  │  · ·S╌╌╌╌╮·         │    节点沿运动原语弧线扩展
+  │    ·      ╰╌╌╌╌G     │    接近目标时 Dubins 曲线直连（⇢）
+  │  ·  ·   ·  ·⇢⇢⇢     │
+  │    · ·  ·            │
+  └──────────────────────┘
+   3D 弧线扩展 + Analytic Expansion
+   扩展节点: ~300~3000（取决于障碍密度和转弯半径）
+   路径质量: 近似最优（运动学可行）
 ```
