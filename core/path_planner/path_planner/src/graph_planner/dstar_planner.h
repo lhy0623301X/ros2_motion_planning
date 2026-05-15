@@ -68,6 +68,7 @@ private:
   void insert(DNodePtr node_ptr, double h_new);
   bool isCollision(DNodePtr n1, DNodePtr n2) const;
   void getNeighbours(DNodePtr node_ptr, std::vector<DNodePtr> & neighbours) const;
+  double calculateObstacleCost(unsigned char cell_cost) const;
   double getCost(DNodePtr n1, DNodePtr n2) const;
   double processState();
   void extractPath(const DNode & start_node, const DNode & goal_node);

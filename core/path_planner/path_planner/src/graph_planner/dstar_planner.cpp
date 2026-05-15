@@ -162,12 +162,30 @@ void DStarPathPlanner::getNeighbours(
   }
 }
 
+double DStarPathPlanner::calculateObstacleCost(unsigned char cell_cost) const
+{
+  const double normalized_cost =
+    static_cast<double>(cell_cost) / static_cast<double>(nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE);
+  const double clamped_cost = std::clamp(normalized_cost, 0.0, 1.0);
+  const double sigmoid =
+    1.0 / (1.0 + std::exp(-config().obstacle_sigmoid_alpha *
+    (clamped_cost - config().obstacle_sigmoid_center)));
+
+  return config().obstacle_cost_weight * sigmoid;
+}
+
 /**
- * @brief 计算两相邻节点之间的移动代价（欧几里得距离）。
+ * @brief 计算两相邻节点之间的移动代价（欧几里得距离 + 障碍物邻近惩罚）。
  */
 double DStarPathPlanner::getCost(DNodePtr n1, DNodePtr n2) const
 {
-  return isCollision(n1, n2) ? INF : std::hypot(n1->x - n2->x, n1->y - n2->y);
+  if (isCollision(n1, n2)) {
+    return INF;
+  }
+
+  const double motion_cost = std::hypot(n1->x - n2->x, n1->y - n2->y);
+  const double obstacle_cost = calculateObstacleCost(curr_global_costmap_[n2->id]);
+  return motion_cost + obstacle_cost;
 }
 
 /**

@@ -517,6 +517,51 @@ function DStar_Replan(changed_cells):
 - **RAISE/LOWER 机制**：精确区分代价增大和代价减小两种情况，传播行为最小化
 - **反向搜索优势**：路径从 start 沿 parent 链直接到达 goal，无需反转
 
+### 本项目中的 D\* 代价模型扩展
+
+经典 D\* 通常把相邻节点之间的边代价看成：
+
+```
+Cost(n1, n2) = motion_cost
+```
+
+也就是只考虑：
+
+- 四/八邻域步长
+- 障碍物是否可穿越
+
+但在本项目里，单纯的欧氏步长会让路径更容易贴近膨胀障碍边缘，虽然搜索意义上可行，
+却不利于后续控制器稳定跟踪。因此本项目已将 `Dijkstra / A*` 中使用的
+**Sigmoid 障碍物邻近代价** 同步接入 `D*` 的边代价计算中：
+
+```
+Cost(n1, n2) = motion_cost + obstacle_cost
+```
+
+其中：
+
+```
+obstacle_cost = obstacle_cost_weight × sigmoid(normalized_cell_cost)
+```
+
+对应参数仍然复用全局规划器统一配置：
+
+- `obstacle_cost_weight`
+- `obstacle_sigmoid_alpha`
+- `obstacle_sigmoid_center`
+
+这样做的效果是：
+
+- **远离障碍物时**：附加惩罚接近 0，保留 D\* 的基础增量搜索特性
+- **接近障碍物时**：边代价平滑上升，让 D\* 更倾向于选择更安全的传播路径
+- **与其他图搜索算法一致**：项目中的 `Dijkstra / A* / D*` 在“离障碍物越近代价越高”这一策略上保持统一
+
+需要注意的是，D\* 的增量修复机制并没有因为这次扩展而改变：
+
+- `RAISE/LOWER` 状态传播逻辑保持不变
+- 变化的是每条边的基础代价定义
+- 因此本质上是“**带障碍物邻近惩罚的 D\***”，而不是另一种全新算法
+
 ### 局限
 
 - **实现复杂度高**：`ProcessState` 函数的分支逻辑较多，调试困难
