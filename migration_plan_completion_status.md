@@ -214,9 +214,20 @@ src/core/path_planner/
 │   │   ├── path_planner_node.h/.cpp       ← Nav2 GlobalPlanner 插件入口
 │   │   ├── path_planner.h/.cpp            ← 抽象规划器基类 + 路径复用逻辑
 │   │   ├── graph_planner/
-│   │   │   └── dijkstra_planner.h/.cpp    ← 第一个已迁移的算法
+│   │   │   ├── dijkstra_planner.h/.cpp    ← Dijkstra（已验证）
+│   │   │   ├── astar_planner.h/.cpp       ← A*（已验证）
+│   │   │   ├── gbfs_planner.h/.cpp        ← GBFS（已验证）
+│   │   │   ├── jps_planner.h/.cpp         ← JPS 跳点搜索（已迁移）
+│   │   │   ├── dstar_planner.h/.cpp       ← D*（已迁移）
+│   │   │   ├── dstar_lite_planner.h/.cpp  ← D* Lite（已迁移）
+│   │   │   ├── lpa_star_planner.h/.cpp    ← LPA*（已迁移）
+│   │   │   └── hybrid_astar_planner/      ← Hybrid A*（已迁移）
+│   │   │       ├── hybrid_astar_planner.h/.cpp  ← 核心规划器
+│   │   │       ├── motions.h              ← TurnDirection 枚举 + MotionPose 类
+│   │   │       ├── motion_table.h/.cpp    ← Dubins 运动原语表
+│   │   │       └── node_hybrid.h/.cpp     ← 3D 搜索节点
 │   │   └── utils/
-│   │       ├── path_planner_factory.h/.cpp     ← 算法工厂（按名称创建具体规划器）
+│   │       ├── path_planner_factory.h/.cpp     ← 算法工厂（支持 8 种算法）
 │   │       └── path_replanning_utils.h/.cpp    ← 路径复用判断工具
 │   ├── path_planner_plugin.xml            ← pluginlib 注册文件
 │   ├── package.xml
@@ -277,11 +288,17 @@ src/core/path_planner/
 
 | planner_name | 对应类 | 状态 |
 |-------------|--------|------|
-| `"dijkstra"` | `DijkstraPathPlanner` | ✅ 已实现 |
+| `"dijkstra"` | `DijkstraPathPlanner` | ✅ 已验证 |
+| `"A*"` | `AStarPathPlanner` | ✅ 已验证 |
+| `"GBFS"` | `GBFSPathPlanner` | ✅ 已验证 |
+| `"JPS"` | `JPSPathPlanner` | ✅ 已迁移 |
+| `"D*"` | `DStarPathPlanner` | ✅ 已迁移 |
+| `"D* Lite"` | `DStarLitePathPlanner` | ✅ 已迁移 |
+| `"LPA*"` | `LPAStarPathPlanner` | ✅ 已迁移 |
+| `"hybrid_astar"` | `HybridAStarPathPlanner` | ✅ 已迁移 |
 | 其他值 | — | 输出警告，保持空壳模式 |
-| 空字符串 | — | 输出信息，保持空壳模式 |
 
-工厂通过 `node->declare_parameter<>()` 从 Nav2 参数文件读取所有配置项，支持运行时按需配置。
+工厂通过 `node->declare_parameter<>()` 从 Nav2 参数文件读取所有配置项。Hybrid A\* 额外声明 13 个专属参数（dim_3_size、max_iterations、minimum_turning_radius 等），通过 `setHybridConfig()` 注入。
 
 #### 4.1.5 路径复用逻辑（path_replanning_utils）
 
@@ -377,17 +394,92 @@ penalty = obstacle_cost_weight × sigmoid
 
 ---
 
-### 4.4 Phase 2 当前进度总结
+### 4.4 已迁移的全局规划算法详情
+
+#### 4.4.1 2D 图搜索算法（7 种）
+
+| 算法 | 文件 | 状态 | 特性 |
+|------|------|------|------|
+| Dijkstra | `dijkstra_planner.h/.cpp` | ✅ 已验证 | 8-邻域搜索，Sigmoid 障碍物代价模型，全局最优 |
+| A\* | `astar_planner.h/.cpp` | ✅ 已验证 | f = g + h（欧几里得启发式），同 f 值优先低 h，全局最优 |
+| GBFS | `gbfs_planner.h/.cpp` | ✅ 已验证 | 仅按 h 排序（g = 0），极快但不保证最优 |
+| JPS | `jps_planner.h/.cpp` | ✅ 已迁移 | A\* 的加速变体，对角线+直线递归跳跃，跳过对称路径 |
+| D\* | `dstar_planner.h/.cpp` | ✅ 已迁移 | 反向搜索（goal→start），RAISE/LOWER 增量重规划 |
+| D\* Lite | `dstar_lite_planner.h/.cpp` | ✅ 已迁移 | D\* 的简化版，g/rhs 双值 + km 修正，UpdateVertex 统一入口 |
+| LPA\* | `lpa_star_planner.h/.cpp` | ✅ 已迁移 | 正向增量搜索（start→goal），适合起点固定的动态环境 |
+
+所有 2D 算法共享基础设施：
+- 8-邻域运动模型（4 方向 + 4 对角）
+- Sigmoid 障碍物代价模型
+- IsBlocked 碰撞判定（允许膨胀区内部扩展）
+- PlannerDebugInfo 搜索节点可视化
+- 路径复用逻辑（基类内置）
+
+#### 4.4.2 3D 运动学规划算法（1 种）
+
+| 算法 | 文件 | 状态 | 特性 |
+|------|------|------|------|
+| Hybrid A\* | `hybrid_astar_planner/` (7 个文件) | ✅ 已迁移 | 3D (x,y,θ) 搜索空间，Dubins 运动原语，双层启发式，Analytic Expansion |
+
+**Hybrid A\* 文件组成**：
+
+| 文件 | 职责 |
+|------|------|
+| `motions.h` | TurnDirection 枚举（6 种转向）+ MotionPose 类（位姿+转向+代价） |
+| `motion_table.h/.cpp` | Dubins 运动原语表：预计算运动原语、角度量化（N bin）、行驶代价查找 |
+| `node_hybrid.h/.cpp` | 3D 搜索节点：连续位姿存储、运动原语索引、多维度行驶代价计算 |
+| `hybrid_astar_planner.h/.cpp` | 核心规划器：双层启发式（2D Dijkstra + Dubins 距离）、Analytic Expansion、路径复用 |
+
+**Hybrid A\* 专属配置参数**（通过 nav2_params.yaml + Factory 注入）：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `dim_3_size` | 72 | 朝向角量化 bin 数（5°/bin） |
+| `max_iterations` | 100000 | 最大搜索迭代次数 |
+| `minimum_turning_radius` | 0.4 | 最小转弯半径（m） |
+| `analytic_expansion_max_length` | 3.0 | Analytic Expansion 触发距离（m） |
+| `lambda_h` | 1.5 | 启发式权重系数 |
+| `retrospective_penalty` | 0.015 | 代价地图叠加惩罚系数 |
+| `curve_sample_ratio` | 0.1 | Dubins 曲线采样比例 |
+| `non_straight_penalty` | 1.2 | 非直行惩罚倍率 |
+| `change_penalty` | 0.0 | 方向切换惩罚 |
+| `reverse_penalty` | 2.0 | 倒车惩罚倍率 |
+| `default_graph_size` | 100000 | 搜索图初始预分配大小 |
+| `max_approach_iterations` | 1000 | 接近目标最大迭代次数 |
+| `goal_tolerance` | 10.0 | 目标容差（像素） |
+
+#### 4.4.3 算法文档
+
+已创建 `graph_planner_algorithms.md`（约 1000 行），包含：
+
+- 八算法总览对比表（最优性、完备性、效率、应用场景、选型建议）
+- 共享机制（8-邻域运动模型、Sigmoid 代价、碰撞判定）
+- 每个算法的核心思想、关键概念、完整伪代码、亮点与局限
+- Hybrid A\* 特有的运动原语、双层启发式、Analytic Expansion、行驶代价惩罚机制详解
+- 八算法搜索行为直觉对比图
+
+---
+
+### 4.5 Phase 2 当前进度总结
 
 | 子任务 | 状态 | 说明 |
 |--------|------|------|
 | path_planner 包结构 + Nav2 GlobalPlanner 接口适配 | ✅ | PathPlannerNode 实现 configure/cleanup/activate/deactivate/createPlan |
 | PathPlanner 抽象基类 + 坐标转换 + 路径输出 | ✅ | 含 world2Map/map2World/toNavPath/outlineMap |
-| PathPlannerFactory 算法工厂 | ✅ | 按参数名称动态创建规划器，当前支持 dijkstra |
+| PathPlannerFactory 算法工厂 | ✅ | 按参数名称动态创建规划器，支持 8 种算法 |
 | 路径复用逻辑 (path_replanning_utils) | ✅ | 5 步判断：目标一致性 → 偏离检查 → 障碍物检查 → 截取复用 |
-| DijkstraPathPlanner 算法实现 | ✅ | 8 邻域 Dijkstra + Sigmoid 障碍物代价 + 调试可视化集成 |
 | PlannerVisualizer 通用可视化模块 | ✅ | 4 种 Marker 类型，生命周期节点绑定，性能优化 |
-| **A\*, JPS, D\*, Theta\*, 等其余图搜索算法** | 🔲 | 待迁移 |
+| Dijkstra 全局规划算法 | ✅ 已验证 | 8-邻域 Dijkstra + Sigmoid 代价 + 可视化 |
+| A\* 全局规划算法 | ✅ 已验证 | f = g + h，欧几里得启发式 + Sigmoid 代价 + 可视化 |
+| GBFS 全局规划算法 | ✅ 已验证 | 纯启发式贪心搜索 + 可视化 |
+| JPS 跳点搜索算法 | ✅ 已迁移 | 对角线+直线递归跳跃 + 强制邻居检测 + 可视化 |
+| D\* 动态规划算法 | ✅ 已迁移 | 反向搜索 + RAISE/LOWER 增量重规划 + 可视化 |
+| D\* Lite 算法 | ✅ 已迁移 | g/rhs 双值 + km 修正 + 增量重规划 + 可视化 |
+| LPA\* 终身规划算法 | ✅ 已迁移 | 正向增量搜索 + g/rhs 一致性维护 + 可视化 |
+| Hybrid A\* 混合规划算法 | ✅ 已迁移 | 3D 搜索 + Dubins 运动原语 + 双层启发式 + Analytic Expansion + 可视化 |
+| 算法分析文档 (graph_planner_algorithms.md) | ✅ | 八算法伪代码、对比表、直觉图 |
+| nav2_params.yaml 配置更新 | ✅ | 支持 8 种算法切换 + Hybrid A\* 专属参数块 |
+| 所有改动已 Git 提交 | ✅ | 分模块提交，中文 commit message |
 | **RRT, RRT\*, Informed RRT\*, PRM 等采样算法** | 🔲 | 待迁移 |
 | **Controller 基类适配 nav2_core::Controller** | 🔲 | 待开始 |
 | **8 个局部控制器迁移** | 🔲 | 待开始 |
@@ -419,6 +511,6 @@ penalty = obstacle_cost_weight × sigmoid
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | **Phase 1** | **仿真环境 + 基础设施** | **✅ 已完成** |
-| **Phase 2** | **核心算法插件替换** | **🔧 进行中** — 框架已建立，Dijkstra 已验证，待迁移剩余算法和控制器 |
+| **Phase 2** | **核心算法插件替换** | **🔧 进行中** — 全局规划器 8 种算法已全部迁移（Dijkstra/A\*/GBFS 已验证，JPS/D\*/D\* Lite/LPA\*/Hybrid A\* 已迁移），待迁移采样类算法和局部控制器 |
 | Phase 3 | 集成测试 + 端到端验证 | 🔲 未开始 |
 | Phase 4 | 多机器人支持 + 行人仿真(可选) + 文档 | 🔲 未开始 |
