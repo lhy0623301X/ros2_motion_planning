@@ -78,7 +78,7 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSearchedPointsMarker(
   marker.color.r = 0.6F;
   marker.color.g = 1.0F;
   marker.color.b = 0.6F;
-  marker.color.a = 0.8F;
+  marker.color.a = 0.5F;
 
   for (const auto & point : searched_points) {
     marker.points.push_back(toGeometryPoint(point));
@@ -105,7 +105,7 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSampledPointsMarker(
   marker.color.r = 0.6F;
   marker.color.g = 0.6F;
   marker.color.b = 0.6F;
-  marker.color.a = 0.9F;
+  marker.color.a = 0.5F;
 
   for (const auto & point : sampled_points) {
     marker.points.push_back(toGeometryPoint(point));
@@ -130,7 +130,7 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSampledTreeMarker(
   marker.color.r = 0.6F;
   marker.color.g = 0.6F;
   marker.color.b = 0.6F;
-  marker.color.a = 0.7F;
+  marker.color.a = 0.5F;
 
   for (const auto & edge : sampled_tree_edges) {
     marker.points.push_back(toGeometryPoint(edge.start));
@@ -156,7 +156,7 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSampledTrajectoryMarker(
   marker.color.r = 0.3F;
   marker.color.g = 1.0F;
   marker.color.b = 1.0F;
-  marker.color.a = 0.8F;
+  marker.color.a = 0.5F;
 
   for (const auto & trajectory : sampled_trajectories) {
     for (std::size_t i = 1; i < trajectory.size(); ++i) {

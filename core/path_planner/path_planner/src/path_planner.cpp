@@ -12,6 +12,15 @@
 
 namespace rmp::path_planner {
 
+namespace {
+
+double calcPlanarDistance(const Point3d & lhs, const Point3d & rhs)
+{
+  return std::hypot(lhs.x - rhs.x, lhs.y - rhs.y);
+}
+
+}  // namespace
+
 PathPlanner::PathPlanner(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
 : costmap_ros_(std::move(costmap_ros)),
   costmap_(costmap_ros_ ? costmap_ros_->getCostmap() : nullptr)
@@ -23,14 +32,23 @@ nav_msgs::msg::Path PathPlanner::createPlan(
   const geometry_msgs::msg::PoseStamped & goal)
 {
   clearDebugInfo();
+  const Point3d current_start{start.pose.position.x, start.pose.position.y, 0.0};
+  const Point3d current_goal{goal.pose.position.x, goal.pose.position.y, 0.0};
 
-  // 步骤 1：如果上一帧路径存在，先判断能否直接复用上一帧路径。
-  if (config_.enable_path_reuse && !last_path_.empty()) {
+  // 步骤 1：如果上一帧路径存在，先判断当前目标是否与上一帧目标一致。
+  // 只有目标未明显变化时，旧路径复用才有意义；一旦换了目标，就必须重规划。
+  const bool goal_matches_last_plan =
+    has_last_goal_ &&
+    calcPlanarDistance(current_goal, last_goal_) < config_.goal_reuse_tolerance;
+
+  // 步骤 2：只有在“路径复用开关开启 + 上一帧路径存在 + 目标未变化”时，
+  // 才进一步判断能否直接复用上一帧路径。
+  if (config_.enable_path_reuse && !last_path_.empty() && goal_matches_last_plan) {
     const auto replanning_decision = utils::shouldReplan(
-      {start.pose.position.x, start.pose.position.y, 0.0},
+      current_start,
       last_path_, costmap_, config_);
 
-    // 步骤 2：若当前位置仍贴近上一帧路径，且剩余路径未被阻挡，
+    // 步骤 3：若当前位置仍贴近上一帧路径，且剩余路径未被阻挡，
     // 就从最近点开始截取剩余路径，直接作为当前规划结果输出。
     if (!replanning_decision.need_replanning) {
       Points3d reused_path(
@@ -41,21 +59,24 @@ nav_msgs::msg::Path PathPlanner::createPlan(
     }
   }
 
-  // 步骤 3：若不存在可复用路径，则调用具体规划算法重新搜索新路径。
+  // 步骤 4：若不存在可复用路径，则调用具体规划算法重新搜索新路径。
   Points3d path;
   Points3d expand;
   const bool found = plan(
-    {start.pose.position.x, start.pose.position.y, 0.0},
-    {goal.pose.position.x, goal.pose.position.y, 0.0},
+    current_start,
+    current_goal,
     &path, &expand);
 
   if (!found) {
     last_path_.clear();
+    has_last_goal_ = false;
     return nav_msgs::msg::Path{};
   }
 
-  // 步骤 4：保存本次新生成的路径，供下一帧判断是否需要重规划。
+  // 步骤 5：保存本次新生成的路径和对应目标，供下一帧判断是否需要重规划。
   last_path_ = path;
+  last_goal_ = current_goal;
+  has_last_goal_ = true;
   return toNavPath(path, goal.header.frame_id, goal.header.stamp);
 }
 

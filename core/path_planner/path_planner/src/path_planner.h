@@ -35,6 +35,7 @@ struct PathPlannerConfig
   double obstacle_sigmoid_alpha{10.0};
   double obstacle_sigmoid_center{0.35};
   double replanning_distance{0.5};
+  double goal_reuse_tolerance{0.2};
   bool enable_path_reuse{true};
   bool enable_debug_visualization{true};
   bool outline_map{false};
@@ -109,6 +110,8 @@ protected:
   PathPlannerConfig config_;
   common::util::PlannerDebugInfo debug_info_;
   Points3d last_path_;
+  Point3d last_goal_;
+  bool has_last_goal_{false};
 };
 
 }  // namespace rmp::path_planner

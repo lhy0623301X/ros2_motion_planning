@@ -120,8 +120,9 @@ planner_server:
       plugin: "path_planner/PathPlanner" # 自定义路径规划器插件
       planner_name: "dijkstra"           # 搜索算法：dijkstra（还可用A*、RRT等）
       obstacle_cost_weight: 3.0          # 障碍物邻近代价权重，越大越倾向于远离障碍物
-      enable_path_reuse: true            # 是否启用路径复用逻辑
+      enable_path_reuse: false            # 是否启用路径复用逻辑
       replanning_distance: 0.5           # 若当前位置距离上一帧路径最近点小于该阈值，则优先复用旧路径
+      goal_reuse_tolerance: 0.2          # 只有当前目标与上一帧目标足够接近时，才允许复用旧路径
 
 # -----------------------------------------------------------------------------
 # Controller Server — 局部轨迹规划与控制器

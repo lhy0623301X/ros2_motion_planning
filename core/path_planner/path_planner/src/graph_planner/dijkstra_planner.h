@@ -24,6 +24,7 @@ public:
 
 private:
   double calcObstacleSigmoidCost(unsigned char cell_cost) const;
+  void fillSearchedPointsDebugInfo(const Points3d & expand);
 
   struct Node
   {

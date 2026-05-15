@@ -30,6 +30,8 @@ bool PathPlannerFactory::createPlanner(
     plugin_name + ".obstacle_sigmoid_center", config.obstacle_sigmoid_center);
   config.replanning_distance = node->declare_parameter<double>(
     plugin_name + ".replanning_distance", config.replanning_distance);
+  config.goal_reuse_tolerance = node->declare_parameter<double>(
+    plugin_name + ".goal_reuse_tolerance", config.goal_reuse_tolerance);
   config.enable_path_reuse = node->declare_parameter<bool>(
     plugin_name + ".enable_path_reuse", config.enable_path_reuse);
   config.enable_debug_visualization = node->declare_parameter<bool>(

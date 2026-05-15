@@ -44,6 +44,20 @@ double DijkstraPathPlanner::calcObstacleSigmoidCost(unsigned char cell_cost) con
   return config().obstacle_cost_weight * sigmoid;
 }
 
+void DijkstraPathPlanner::fillSearchedPointsDebugInfo(const Points3d & expand)
+{
+  auto & searched_points = mutableDebugInfo().searched_points;
+  searched_points.clear();
+  searched_points.reserve(expand.size());
+
+  for (const auto & point : expand) {
+    double wx;
+    double wy;
+    map2World(point.x, point.y, wx, wy);
+    searched_points.push_back({wx, wy, point.theta});
+  }
+}
+
 bool DijkstraPathPlanner::plan(
   const Point3d & start,
   const Point3d & goal,
@@ -100,12 +114,7 @@ bool DijkstraPathPlanner::plan(
     // 步骤 5：如果当前节点已经到达目标点，
     // 就沿父节点链回溯出整条路径，再转换回世界坐标后返回成功。
     if (current == goal_node) {
-      auto & searched_points = mutableDebugInfo().searched_points;
-      searched_points.clear();
-      searched_points.reserve(expand->size());
-      for (const auto & point : *expand) {
-        searched_points.push_back({point.x, point.y, point.theta});
-      }
+      fillSearchedPointsDebugInfo(*expand);
       const auto backtrace = convertClosedListToPath(closed_list, start_node, goal_node);
       for (auto iter = backtrace.rbegin(); iter != backtrace.rend(); ++iter) {
         double wx;
@@ -156,12 +165,7 @@ bool DijkstraPathPlanner::plan(
   }
 
   // 步骤 7：如果 open list 已经耗尽，说明当前地图上不存在可行路径。
-  auto & searched_points = mutableDebugInfo().searched_points;
-  searched_points.clear();
-  searched_points.reserve(expand->size());
-  for (const auto & point : *expand) {
-    searched_points.push_back({point.x, point.y, point.theta});
-  }
+  fillSearchedPointsDebugInfo(*expand);
   return false;
 }
 

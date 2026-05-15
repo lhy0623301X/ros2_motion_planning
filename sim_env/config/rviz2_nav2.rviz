@@ -322,6 +322,18 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /waypoints
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /visualization_marker_array
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -360,7 +372,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 26.724334716796875
+      Distance: 30.645776748657227
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
