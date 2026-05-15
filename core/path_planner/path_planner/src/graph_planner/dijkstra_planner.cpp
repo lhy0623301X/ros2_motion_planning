@@ -24,6 +24,26 @@ DijkstraPathPlanner::DijkstraPathPlanner(
 {
 }
 
+double DijkstraPathPlanner::calcObstacleSigmoidCost(unsigned char cell_cost) const
+{
+  // 将代价值归一化到 [0, 1]。
+  // inflation layer 会让离障碍物越近的栅格拥有越高的 cost，
+  // 因此这里可以把 cost 近似视为“离障碍物近”的程度。
+  const double normalized_cost =
+    static_cast<double>(cell_cost) / static_cast<double>(nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE);
+  const double clamped_cost = std::max(0.0, std::min(1.0, normalized_cost));
+
+  // 使用 Sigmoid 将障碍物邻近程度映射成平滑惩罚：
+  // - 离障碍物远时，惩罚接近 0
+  // - 接近 sigmoid_center 后，惩罚快速上升
+  // - 离障碍物越近，惩罚越接近 obstacle_cost_weight
+  const double sigmoid =
+    1.0 / (1.0 + std::exp(-config().obstacle_sigmoid_alpha *
+    (clamped_cost - config().obstacle_sigmoid_center)));
+
+  return config().obstacle_cost_weight * sigmoid;
+}
+
 bool DijkstraPathPlanner::plan(
   const Point3d & start,
   const Point3d & goal,
@@ -94,7 +114,6 @@ bool DijkstraPathPlanner::plan(
     // Dijkstra 只使用累计路径代价 g，不引入启发式代价 h。
     for (const auto & motion : motions_) {
       auto next = current + motion;
-      next.g = current.g + motion.g;
       next.id = grid2Index(next.x, next.y);
 
       // 忽略已经完成扩展的节点。
@@ -118,6 +137,12 @@ bool DijkstraPathPlanner::plan(
       {
         continue;
       }
+
+      // 步骤 6.1：在基础运动代价之外，引入“离障碍物越近代价越高”的惩罚项。
+      // 这里不直接计算几何距离，而是利用 inflation layer 生成的 cost 近似反映
+      // 障碍物邻近程度，再通过 Sigmoid 函数将其平滑映射为附加代价。
+      const double obstacle_penalty = calcObstacleSigmoidCost(char_map[next.id]);
+      next.g = current.g + motion.g + obstacle_penalty;
 
       // 合法邻接节点压入 open list，等待后续继续扩展。
       open_list.push(next);

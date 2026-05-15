@@ -23,6 +23,8 @@ public:
     Points3d * expand) override;
 
 private:
+  double calcObstacleSigmoidCost(unsigned char cell_cost) const;
+
   struct Node
   {
     int x{0};

@@ -40,6 +40,11 @@ const PathPlannerConfig & PathPlanner::config() const
   return config_;
 }
 
+void PathPlanner::setConfig(const PathPlannerConfig & config)
+{
+  config_ = config;
+}
+
 nav2_costmap_2d::Costmap2D * PathPlanner::getCostMap() const
 {
   return costmap_;

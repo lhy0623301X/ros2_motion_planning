@@ -29,6 +29,9 @@ struct PathPlannerConfig
 {
   double default_tolerance{2.0};
   double obstacle_inflation_factor{1.0};
+  double obstacle_cost_weight{3.0};
+  double obstacle_sigmoid_alpha{10.0};
+  double obstacle_sigmoid_center{0.35};
   bool outline_map{false};
 };
 
@@ -49,6 +52,7 @@ public:
     const geometry_msgs::msg::PoseStamped & goal);
 
   const PathPlannerConfig & config() const;
+  void setConfig(const PathPlannerConfig & config);
   nav2_costmap_2d::Costmap2D * getCostMap() const;
   int getMapSize() const;
   int grid2Index(int x, int y) const;
