@@ -54,7 +54,7 @@ def generate_launch_description():
         DeclareLaunchArgument('yaw', default_value='0.0'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('rviz', default_value='true'),
-        DeclareLaunchArgument('nav2_start_delay', default_value='3.0'),
+        DeclareLaunchArgument('nav2_start_delay', default_value='5.0'),
         DeclareLaunchArgument(
             'params_file',
             default_value=os.path.join(sim_env_dir, 'config', 'nav2_params.yaml'),
