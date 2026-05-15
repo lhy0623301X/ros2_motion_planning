@@ -45,9 +45,9 @@ bool PathPlannerFactory::createPlanner(
 
   if (planner_props.planner_name == "dijkstra") {
     planner = std::make_shared<DijkstraPathPlanner>(costmap_ros);
-  } else if (planner_props.planner_name == "astar") {
+  } else if (planner_props.planner_name == "A*") {
     planner = std::make_shared<AStarPathPlanner>(costmap_ros);
-  } else if (planner_props.planner_name == "gbfs") {
+  } else if (planner_props.planner_name == "GBFS") {
     planner = std::make_shared<GBFSPathPlanner>(costmap_ros);
   }
 
