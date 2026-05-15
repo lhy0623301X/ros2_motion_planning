@@ -22,7 +22,11 @@ add_library(${PROJECT_NAME} SHARED
   src/path_planner_node.cpp
   src/graph_planner/astar_planner.cpp
   src/graph_planner/dijkstra_planner.cpp
+  src/graph_planner/dstar_planner.cpp
+  src/graph_planner/dstar_lite_planner.cpp
   src/graph_planner/gbfs_planner.cpp
+  src/graph_planner/jps_planner.cpp
+  src/graph_planner/lpa_star_planner.cpp
   src/utils/path_planner_factory.cpp
   src/utils/path_replanning_utils.cpp
 )

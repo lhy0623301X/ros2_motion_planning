@@ -6,7 +6,11 @@
 
 #include "graph_planner/astar_planner.h"
 #include "graph_planner/dijkstra_planner.h"
+#include "graph_planner/dstar_planner.h"
+#include "graph_planner/dstar_lite_planner.h"
 #include "graph_planner/gbfs_planner.h"
+#include "graph_planner/jps_planner.h"
+#include "graph_planner/lpa_star_planner.h"
 
 namespace rmp::path_planner {
 
@@ -51,6 +55,14 @@ bool PathPlannerFactory::createPlanner(
     planner = std::make_shared<AStarPathPlanner>(costmap_ros);
   } else if (planner_props.planner_name == "GBFS") {
     planner = std::make_shared<GBFSPathPlanner>(costmap_ros);
+  } else if (planner_props.planner_name == "JPS") {
+    planner = std::make_shared<JPSPathPlanner>(costmap_ros);
+  } else if (planner_props.planner_name == "D*") {
+    planner = std::make_shared<DStarPathPlanner>(costmap_ros);
+  } else if (planner_props.planner_name == "D* Lite") {
+    planner = std::make_shared<DStarLitePathPlanner>(costmap_ros);
+  } else if (planner_props.planner_name == "LPA*") {
+    planner = std::make_shared<LPAStarPathPlanner>(costmap_ros);
   }
 
   if (planner) {
