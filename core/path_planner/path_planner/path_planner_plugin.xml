@@ -1,7 +1,10 @@
-<library path="lib/libpath_planner">
-  <class name="path_planner/PathPlanner" type="rmp::path_planner::PathPlannerNode" base_class_type="nav_core::BaseGlobalPlanner">
+<library path="path_planner">
+  <class
+    name="path_planner/PathPlanner"
+    type="rmp::path_planner::PathPlannerNode"
+    base_class_type="nav2_core::GlobalPlanner">
     <description>
-      A implementation of global path planning algorithm: path planner
+      Minimal ROS 2 path planner shell used during phased algorithm migration.
     </description>
   </class>
 </library>
