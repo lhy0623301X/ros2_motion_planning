@@ -60,10 +60,6 @@ public:
     double resolution);
 
 private:
-  visualization_msgs::msg::Marker makeDeleteAllMarker(
-    const std::string & frame_id,
-    const rclcpp::Time & stamp) const;
-
   visualization_msgs::msg::Marker makeSearchedPointsMarker(
     const DebugPoints3d & searched_points,
     const std::string & frame_id,

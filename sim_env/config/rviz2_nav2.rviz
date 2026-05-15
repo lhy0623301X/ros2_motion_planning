@@ -3,7 +3,8 @@ Panels:
     Help Height: 78
     Name: Displays
     Property Tree Widget:
-      Expanded: ~
+      Expanded:
+        - /MarkerArray2
       Splitter Ratio: 0.5
     Tree Height: 671
   - Class: rviz_common/Selection
@@ -326,13 +327,13 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        {}
+        searched_points: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /visualization_marker_array
+        Value: /GridBased/debug_markers
       Value: true
   Enabled: true
   Global Options:
@@ -372,16 +373,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 30.645776748657227
+      Distance: 25.50196647644043
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: -0.07286323606967926
+        Y: 0.6461354494094849
+        Z: -0.18634355068206787
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
