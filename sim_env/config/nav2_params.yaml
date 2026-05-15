@@ -157,12 +157,12 @@ controller_server:
       # 速度边界
       min_vel_x: 0.0              # x最小线速度 [m/s]
       min_vel_y: 0.0              # y最小线速度 [m/s]（差速机器人设为0）
-      max_vel_x: 0.26             # x最大线速度 [m/s]
+      max_vel_x: 0.50             # x最大线速度 [m/s]
       max_vel_y: 0.0              # y最大线速度 [m/s]
       max_vel_theta: 1.82         # 最大角速度 [rad/s]
 
       min_speed_xy: 0.0           # xy合速度下限 [m/s]
-      max_speed_xy: 0.26          # xy合速度上限 [m/s]
+      max_speed_xy: 0.50          # xy合速度上限 [m/s]
       min_speed_theta: 0.0        # 角速度绝对值下限 [rad/s]
 
       # 加速度限制
@@ -377,7 +377,7 @@ velocity_smoother:
     smoothing_frequency: 20.0     # 平滑处理频率 [Hz]
     scale_velocities: false       # 是否按比例整体缩放速度分量
     feedback: "OPEN_LOOP"         # 反馈模式：OPEN_LOOP（开环）或 CLOSED_LOOP
-    max_velocity: [0.26, 0.0, 1.0]     # 最大速度 [vx, vy, vtheta]
+    max_velocity: [0.50, 0.0, 1.0]     # 最大速度 [vx, vy, vtheta]
     min_velocity: [-0.26, 0.0, -1.0]   # 最小速度（允许后退时设为负值）
     max_accel: [2.5, 0.0, 3.2]         # 最大加速度 [ax, ay, atheta]
     max_decel: [-2.5, 0.0, -3.2]       # 最大减速度
