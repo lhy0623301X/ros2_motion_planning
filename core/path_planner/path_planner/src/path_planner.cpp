@@ -4,6 +4,7 @@
  */
 #include "path_planner.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "rclcpp/rclcpp.hpp"
@@ -186,6 +187,41 @@ bool PathPlanner::validityCheck(double wx, double wy, double & mx, double & my) 
   const bool valid = world2Map(wx, wy, mx, my);
 
   return valid;
+}
+
+bool PathPlanner::isNodeCollisionFree(int mx, int my) const
+{
+  if (!costmap_) {
+    return false;
+  }
+
+  if (mx < 0 || my < 0 || mx >= getSizeInCellsX() || my >= getSizeInCellsY()) {
+    return false;
+  }
+
+  const int margin_cells = static_cast<int>(
+    std::ceil(std::max(0.0, config_.planning_safety_margin) / costmap_->getResolution()));
+  const double lethal_threshold =
+    nav2_costmap_2d::LETHAL_OBSTACLE * config_.obstacle_inflation_factor;
+  const auto * char_map = costmap_->getCharMap();
+
+  for (int dy = -margin_cells; dy <= margin_cells; ++dy) {
+    for (int dx = -margin_cells; dx <= margin_cells; ++dx) {
+      const int nx = mx + dx;
+      const int ny = my + dy;
+
+      if (nx < 0 || ny < 0 || nx >= getSizeInCellsX() || ny >= getSizeInCellsY()) {
+        return false;
+      }
+
+      const int index = grid2Index(nx, ny);
+      if (char_map[index] >= lethal_threshold) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 nav_msgs::msg::Path PathPlanner::toNavPath(

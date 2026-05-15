@@ -129,17 +129,18 @@ bool DijkstraPathPlanner::plan(
     // Dijkstra 只使用累计路径代价 g，不引入启发式代价 h。
     for (const auto & motion : motions_) {
       auto next = current + motion;
+      next.parent_id = current.id;
+
+      if (next.x < 0 || next.y < 0 ||
+        next.x >= getSizeInCellsX() || next.y >= getSizeInCellsY())
+      {
+        continue;
+      }
+
       next.id = grid2Index(next.x, next.y);
 
       // 忽略已经完成扩展的节点。
       if (closed_list.find(next.id) != closed_list.end()) {
-        continue;
-      }
-
-      next.parent_id = current.id;
-
-      // 丢弃落在 costmap 边界之外的邻接节点。
-      if (next.id < 0 || next.id >= getMapSize()) {
         continue;
       }
 
@@ -150,6 +151,12 @@ bool DijkstraPathPlanner::plan(
       if (char_map[next.id] >= nav2_costmap_2d::LETHAL_OBSTACLE * config().obstacle_inflation_factor &&
           char_map[next.id] >= char_map[current.id])
       {
+        continue;
+      }
+
+      // 步骤 6.0：在 costmap 膨胀之外，再叠加一层规划安全边界，
+      // 给车体尺寸和控制误差预留余量。
+      if (!isNodeCollisionFree(next.x, next.y)) {
         continue;
       }
 

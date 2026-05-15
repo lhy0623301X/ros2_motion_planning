@@ -30,6 +30,8 @@ bool PathPlannerFactory::createPlanner(
     plugin_name + ".obstacle_sigmoid_alpha", config.obstacle_sigmoid_alpha);
   config.obstacle_sigmoid_center = node->declare_parameter<double>(
     plugin_name + ".obstacle_sigmoid_center", config.obstacle_sigmoid_center);
+  config.planning_safety_margin = node->declare_parameter<double>(
+    plugin_name + ".planning_safety_margin", config.planning_safety_margin);
   config.replanning_distance = node->declare_parameter<double>(
     plugin_name + ".replanning_distance", config.replanning_distance);
   config.goal_reuse_tolerance = node->declare_parameter<double>(

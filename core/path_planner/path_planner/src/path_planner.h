@@ -34,6 +34,7 @@ struct PathPlannerConfig
   double obstacle_cost_weight{3.0};
   double obstacle_sigmoid_alpha{10.0};
   double obstacle_sigmoid_center{0.35};
+  double planning_safety_margin{0.0};
   double replanning_distance{0.5};
   double goal_reuse_tolerance{0.2};
   bool enable_path_reuse{true};
@@ -68,6 +69,7 @@ public:
   void map2World(double mx, double my, double & wx, double & wy) const;
   void outlineMap();
   bool validityCheck(double wx, double wy, double & mx, double & my) const;
+  bool isNodeCollisionFree(int mx, int my) const;
 
 protected:
   template<typename NodeT>
