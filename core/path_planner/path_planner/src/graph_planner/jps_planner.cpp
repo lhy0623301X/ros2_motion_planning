@@ -12,6 +12,7 @@
 #include <unordered_map>
 
 #include "nav2_costmap_2d/cost_values.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 namespace rmp::path_planner {
 
@@ -19,6 +20,24 @@ JPSPathPlanner::JPSPathPlanner(
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
 : PathPlanner(std::move(costmap_ros))
 {
+}
+
+void JPSPathPlanner::resetDebugCounters()
+{
+  blocked_reject_count_ = 0;
+  safety_reject_count_ = 0;
+  forced_neighbor_safety_reject_count_ = 0;
+}
+
+bool JPSPathPlanner::isSafeFreeCellByIndex(int index) const
+{
+  if (index < 0 || index >= map_size_) {
+    return false;
+  }
+
+  int x, y;
+  index2Grid(index, x, y);
+  return isNodeCollisionFree(x, y);
 }
 
 Points3d JPSPathPlanner::densifyPathInWorld(const Points3d & jump_points) const
@@ -75,11 +94,17 @@ bool JPSPathPlanner::plan(
   Points3d * path,
   Points3d * expand)
 {
+  auto logger = rclcpp::get_logger("path_planner.jps");
+
   // 步骤 1：将起点和终点从世界坐标转换到代价地图栅格坐标。
   double start_mx, start_my, goal_mx, goal_my;
   if (!validityCheck(start.x, start.y, start_mx, start_my) ||
       !validityCheck(goal.x, goal.y, goal_mx, goal_my))
   {
+    RCLCPP_WARN(
+      logger,
+      "JPS 规划失败: 起点或终点未通过 validityCheck。start=(%.3f, %.3f), goal=(%.3f, %.3f)",
+      start.x, start.y, goal.x, goal.y);
     return false;
   }
 
@@ -112,9 +137,26 @@ bool JPSPathPlanner::plan(
   goal_ = JNode(
     static_cast<int>(goal_mx), static_cast<int>(goal_my));
   goal_.id = grid2Index(goal_.x, goal_.y);
+  resetDebugCounters();
 
   path->clear();
   expand->clear();
+
+  if (!isNodeCollisionFree(start_.x, start_.y)) {
+    RCLCPP_WARN(
+      logger,
+      "JPS 规划失败: 起点被 planning_safety_margin 过滤。start_grid=(%d, %d), margin=%.3f m",
+      start_.x, start_.y, config().planning_safety_margin);
+    return false;
+  }
+
+  if (!isNodeCollisionFree(goal_.x, goal_.y)) {
+    RCLCPP_WARN(
+      logger,
+      "JPS 规划失败: 终点被 planning_safety_margin 过滤。goal_grid=(%d, %d), margin=%.3f m",
+      goal_.x, goal_.y, config().planning_safety_margin);
+    return false;
+  }
 
   // 步骤 4：初始化 open list 和 closed list，从起点向四个对角方向发起探测。
   OpenList open_list = OpenList();
@@ -170,6 +212,15 @@ bool JPSPathPlanner::plan(
 
   // 步骤 8：open list 耗尽，无可行路径。
   fillSearchedPointsDebugInfo(*expand);
+  RCLCPP_WARN(
+    logger,
+    "JPS 搜索失败: open list 耗尽。expanded=%zu, blocked_rejects=%d, safety_rejects=%d, "
+    "forced_neighbor_safety_rejects=%d, margin=%.3f m",
+    expand->size(),
+    blocked_reject_count_,
+    safety_reject_count_,
+    forced_neighbor_safety_reject_count_,
+    config().planning_safety_margin);
   return false;
 }
 
@@ -221,31 +272,52 @@ bool JPSPathPlanner::forceNeighborDetect(
   if (it == dir_to_obs_id_.end()) {
     return false;
   }
-  const auto * char_map = getCostMap()->getCharMap();
-  const double lethal = nav2_costmap_2d::LETHAL_OBSTACLE * config().obstacle_inflation_factor;
 
   std::array<int, 2> delta_obs = {dirs_[it->second.first], dirs_[it->second.second]};
+  const bool current_is_safe = isSafeFreeCellByIndex(cur_id);
 
-  // 直线方向（水平/垂直）：检测侧面障碍及其对角方向。
+  // JPS 安全边界优化：
+  // 这里不再仅把“真实障碍物”视为 forced neighbor 的触发来源，
+  // 而是把“在 planning_safety_margin 语义下不可安全通行的相邻格”
+  // 也等价看作障碍边界。这样可以在不破坏 JPS 跳跃结构的前提下，
+  // 让跳点骨架天然远离墙体，而不是等最终路径生成后再被动补救。
+  if (!current_is_safe) {
+    ++safety_reject_count_;
+    return false;
+  }
+
+  // 本次优化标记：
+  // 直线方向（水平/垂直）下，只要侧面格“不安全”、而对角前方“安全”，
+  // 就认为当前位置出现了由安全边界诱导出的 forced neighbor。
   if (dir == 1 || dir == -1 || dir == nx_ || dir == -nx_) {
     for (int i = 0; i < 2; ++i) {
       const int obs_id = cur_id + delta_obs[i];
       const int fn = cur_id + delta_obs[i] + dir;
-      if (obs_id >= 0 && obs_id < map_size_ && fn >= 0 && fn < map_size_ &&
-          char_map[obs_id] >= lethal && char_map[fn] < lethal)
-      {
-        fn_id.push_back(fn);
+      if (obs_id >= 0 && obs_id < map_size_ && fn >= 0 && fn < map_size_) {
+        const bool obs_safe = isSafeFreeCellByIndex(obs_id);
+        const bool fn_safe = isSafeFreeCellByIndex(fn);
+        if (!obs_safe && fn_safe) {
+          fn_id.push_back(fn);
+        } else if (!obs_safe && !fn_safe) {
+          ++forced_neighbor_safety_reject_count_;
+        }
       }
     }
   } else {
-    // 对角方向：检测侧面障碍及其更远一步的对角方向。
+    // 本次优化标记：
+    // 对角方向下沿用同样的安全语义，把安全边界造成的不对称性
+    // 也当作 forced neighbor 的触发条件。
     for (int i = 0; i < 2; ++i) {
       const int obs_id = cur_id + delta_obs[i];
       const int fn = cur_id + 2 * delta_obs[i] + dir;
-      if (obs_id >= 0 && obs_id < map_size_ && fn >= 0 && fn < map_size_ &&
-          char_map[obs_id] >= lethal && char_map[fn] < lethal)
-      {
-        fn_id.push_back(fn);
+      if (obs_id >= 0 && obs_id < map_size_ && fn >= 0 && fn < map_size_) {
+        const bool obs_safe = isSafeFreeCellByIndex(obs_id);
+        const bool fn_safe = isSafeFreeCellByIndex(fn);
+        if (!obs_safe && fn_safe) {
+          fn_id.push_back(fn);
+        } else if (!obs_safe && !fn_safe) {
+          ++forced_neighbor_safety_reject_count_;
+        }
       }
     }
   }
@@ -277,11 +349,19 @@ bool JPSPathPlanner::checkStraightLine(
     }
 
     if (char_map[pt] >= lethal) {
+      ++blocked_reject_count_;
       return false;
     }
 
     int pt_x, pt_y;
     index2Grid(pt, pt_x, pt_y);
+
+    // 直线跳跃过程中，如果当前位置已经贴近障碍物到不满足额外安全边界，
+    // 则不把它继续作为候选跳点使用。
+    if (!isNodeCollisionFree(pt_x, pt_y)) {
+      ++safety_reject_count_;
+      return false;
+    }
 
     if (pt == goal_.id) {
       open_list.emplace(
@@ -363,11 +443,18 @@ bool JPSPathPlanner::checkSlashLine(
     }
 
     if (char_map[pt] >= lethal) {
+      ++blocked_reject_count_;
       return find_jp;
     }
 
     int pt_x, pt_y;
     index2Grid(pt, pt_x, pt_y);
+
+    // 对角跳跃过程中，同样要求当前位置满足额外安全边界。
+    if (!isNodeCollisionFree(pt_x, pt_y)) {
+      ++safety_reject_count_;
+      return find_jp;
+    }
 
     if (pt == goal_.id) {
       open_list.emplace(

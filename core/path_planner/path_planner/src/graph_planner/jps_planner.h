@@ -67,6 +67,8 @@ protected:
 private:
   void fillSearchedPointsDebugInfo(const Points3d & expand);
   Points3d densifyPathInWorld(const Points3d & jump_points) const;
+  void resetDebugCounters();
+  bool isSafeFreeCellByIndex(int index) const;
 
   JNode start_;
   JNode goal_;
@@ -80,6 +82,10 @@ private:
   // [left, right, top, bottom, left-top, right-bottom, right-top, left-bottom]
   std::array<int, 8> dirs_{};
   std::unordered_map<int, std::pair<int, int>> dir_to_obs_id_;
+
+  int blocked_reject_count_{0};
+  int safety_reject_count_{0};
+  int forced_neighbor_safety_reject_count_{0};
 };
 
 }  // namespace rmp::path_planner

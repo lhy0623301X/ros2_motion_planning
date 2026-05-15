@@ -362,6 +362,55 @@ function SlashLineJump(dir, node, open_list):
 - **零额外内存**：不需要额外数据结构，只在 A\* 基础上修改后继生成规则
 - **对角线+直线递归探测**：一次对角步内嵌两次直线探测，高效覆盖整个可达区域
 
+### 本项目中的 JPS 安全边界优化
+
+在项目接入 `planning_safety_margin` 后，最初的做法是把安全边界检查直接塞进
+`checkStraightLine()` / `checkSlashLine()` 的逐步扫描过程里：一旦某一步不满足安全边界，
+就立刻终止整条跳跃方向。实践中这会让 JPS 剪枝过强，典型症状是：
+
+- `expanded = 0`
+- `blocked_rejects = 0`
+- `safety_rejects` 很高
+- open list 很快耗尽
+
+为了解决“路径贴墙”和“搜索直接搜不起来”这两个矛盾，本项目将优化重点放在
+**forced neighbor 的判定语义** 上，而不是继续加重扫描阶段的硬终止条件。
+
+优化后的思路是：
+
+```
+function SafeForcedNeighborDetect(current, dir):
+    if current 不是安全可通行格:
+        return false
+
+    for each side_neighbor induced by dir:
+        if side_neighbor 在安全语义下不可通行
+           AND corresponding_forced_neighbor 在安全语义下可通行:
+            return true
+
+    return false
+```
+
+这相当于把 JPS 从：
+
+- `obstacle-based forced neighbor`
+
+推广成：
+
+- `safe-occupancy-based forced neighbor`
+
+也就是把“因安全边界而不可走的格子”视为一种**等效障碍边界**。这样做有几个直接收益：
+
+- **跳点骨架天然远离墙体**：不需要等最终路径输出后再做被动修正
+- **保留 JPS 跳跃结构**：不会像逐步硬终止那样把整条扫描方向过早掐死
+- **更符合工程需求**：对控制误差、车体尺寸和局部控制器的可跟踪性更友好
+
+这次优化特别适合本项目这种“全局规划输出要进一步交给 DWB 跟踪”的链路，因为：
+
+- 只追求搜索可达的 JPS 路径往往会贴近墙体
+- 贴墙路径即使在全局层可行，也容易让局部控制器跟踪失败
+- 让 forced neighbor 在安全语义下提前远离墙体，比单纯靠 DWB 再兜底更稳定
+
 ### 局限
 
 - **仅适用于均匀代价网格**：JPS 假设所有非障碍格的通行代价相同，无法利用 Sigmoid 代价模型
