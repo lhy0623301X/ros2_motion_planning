@@ -118,12 +118,27 @@ planner_server:
     planner_plugins: ["GridBased"]   # 加载的规划器插件列表
     GridBased:
       plugin: "path_planner/PathPlanner" # 自定义路径规划器插件
-      planner_name: "GBFS"           # 搜索算法：dijkstra、A*、GBFS、JPS、D*、D* Lite、LPA*
+      planner_name: "GBFS"           # 搜索算法：dijkstra、A*、GBFS、JPS、D*、D* Lite、LPA*、hybrid A*
       obstacle_cost_weight: 3.0          # 障碍物邻近代价权重，越大越倾向于远离障碍物
       planning_safety_margin: 0.15       # 规划额外安全边界[m]，所有算法统一使用
       enable_path_reuse: false            # 是否启用路径复用逻辑
       replanning_distance: 0.5           # 若当前位置距离上一帧路径最近点小于该阈值，则优先复用旧路径
       goal_reuse_tolerance: 0.2          # 只有当前目标与上一帧目标足够接近时，才允许复用旧路径
+      # -- Hybrid A* 专用参数（仅当 planner_name 为 hybrid_astar 时生效）--
+      hybrid_astar:
+        dim_3_size: 72                       # 朝向角量化份数（72 = 5°/bin）
+        max_iterations: 10000                # 搜索最大迭代次数
+        max_approach_iterations: 1000        # 最后阶段逼近最大迭代
+        goal_tolerance: 2.0                  # 目标判定容差（网格单元数）
+        minimum_turning_radius: 0.4          # 车辆最小转弯半径 [m]
+        curve_sample_ratio: 0.1              # Dubins 曲线采样间隔与转弯半径的比值
+        non_straight_penalty: 1.2            # 非直行运动惩罚系数
+        change_penalty: 0.0                  # 方向切换惩罚系数
+        reverse_penalty: 2.0                 # 倒车惩罚系数
+        retrospective_penalty: 0.015         # 代价地图叠加惩罚系数
+        analytic_expansion_max_length: 3.0   # Analytic Expansion 最大尝试距离 [m]
+        lambda_h: 2.0                        # 启发式权重因子
+        default_graph_size: 100000           # 预分配搜索图大小
 
 # -----------------------------------------------------------------------------
 # Controller Server — 局部轨迹规划与控制器

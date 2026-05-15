@@ -27,6 +27,9 @@ add_library(${PROJECT_NAME} SHARED
   src/graph_planner/gbfs_planner.cpp
   src/graph_planner/jps_planner.cpp
   src/graph_planner/lpa_star_planner.cpp
+  src/graph_planner/hybrid_astar_planner/hybrid_astar_planner.cpp
+  src/graph_planner/hybrid_astar_planner/motion_table.cpp
+  src/graph_planner/hybrid_astar_planner/node_hybrid.cpp
   src/utils/path_planner_factory.cpp
   src/utils/path_replanning_utils.cpp
 )

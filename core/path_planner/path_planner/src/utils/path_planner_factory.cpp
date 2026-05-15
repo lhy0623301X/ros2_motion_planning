@@ -11,6 +11,7 @@
 #include "graph_planner/gbfs_planner.h"
 #include "graph_planner/jps_planner.h"
 #include "graph_planner/lpa_star_planner.h"
+#include "graph_planner/hybrid_astar_planner/hybrid_astar_planner.h"
 
 namespace rmp::path_planner {
 
@@ -63,6 +64,37 @@ bool PathPlannerFactory::createPlanner(
     planner = std::make_shared<DStarLitePathPlanner>(costmap_ros);
   } else if (planner_props.planner_name == "LPA*") {
     planner = std::make_shared<LPAStarPathPlanner>(costmap_ros);
+  } else if (planner_props.planner_name == "hybrid A*") {
+    auto hybrid = std::make_shared<HybridAStarPathPlanner>(costmap_ros);
+    HybridAStarConfig hcfg;
+    hcfg.dim_3_size = node->declare_parameter<int>(
+      plugin_name + ".hybrid_astar.dim_3_size", hcfg.dim_3_size);
+    hcfg.max_iterations = node->declare_parameter<int>(
+      plugin_name + ".hybrid_astar.max_iterations", hcfg.max_iterations);
+    hcfg.max_approach_iterations = node->declare_parameter<int>(
+      plugin_name + ".hybrid_astar.max_approach_iterations", hcfg.max_approach_iterations);
+    hcfg.goal_tolerance = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.goal_tolerance", hcfg.goal_tolerance);
+    hcfg.minimum_turning_radius = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.minimum_turning_radius", hcfg.minimum_turning_radius);
+    hcfg.curve_sample_ratio = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.curve_sample_ratio", hcfg.curve_sample_ratio);
+    hcfg.non_straight_penalty = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.non_straight_penalty", hcfg.non_straight_penalty);
+    hcfg.change_penalty = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.change_penalty", hcfg.change_penalty);
+    hcfg.reverse_penalty = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.reverse_penalty", hcfg.reverse_penalty);
+    hcfg.retrospective_penalty = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.retrospective_penalty", hcfg.retrospective_penalty);
+    hcfg.analytic_expansion_max_length = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.analytic_expansion_max_length", hcfg.analytic_expansion_max_length);
+    hcfg.lambda_h = node->declare_parameter<double>(
+      plugin_name + ".hybrid_astar.lambda_h", hcfg.lambda_h);
+    hcfg.default_graph_size = node->declare_parameter<int>(
+      plugin_name + ".hybrid_astar.default_graph_size", hcfg.default_graph_size);
+    hybrid->setHybridConfig(hcfg);
+    planner = hybrid;
   }
 
   if (planner) {
