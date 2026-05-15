@@ -6,7 +6,6 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
 from nav2_common.launch import RewrittenYaml
 
 
@@ -21,10 +20,6 @@ def generate_launch_description():
     yaw = LaunchConfiguration('yaw')
 
     default_params_file = os.path.join(sim_env_dir, 'config', 'nav2_params.yaml')
-
-    map_yaml_path = [
-        FindPackageShare('sim_env'), '/maps/', map_name, '/', map_name, '.yaml'
-    ]
 
     param_substitutions = {'use_sim_time': use_sim_time}
     configured_params = RewrittenYaml(
@@ -43,7 +38,10 @@ def generate_launch_description():
     ]
 
     return LaunchDescription([
-        DeclareLaunchArgument('map', default_value='warehouse'),
+        DeclareLaunchArgument(
+            'map',
+            default_value=os.path.join(sim_env_dir, 'maps', 'workshop', 'workshop.yaml'),
+        ),
         DeclareLaunchArgument('params_file', default_value=default_params_file),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('x_pose', default_value='0.0'),
@@ -57,7 +55,7 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 configured_params,
-                {'yaml_filename': map_yaml_path},
+                {'yaml_filename': map_name},
             ],
         ),
 

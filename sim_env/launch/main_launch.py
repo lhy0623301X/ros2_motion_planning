@@ -32,16 +32,22 @@ def generate_launch_description():
     params_file = LaunchConfiguration('params_file')
     nav2_start_delay = LaunchConfiguration('nav2_start_delay')
 
-    gazebo_models_path = os.path.join(sim_env_dir, 'models')
+    gazebo_model_paths = os.path.join(sim_env_dir, 'models')
 
     return LaunchDescription([
         SetEnvironmentVariable(
             name='GAZEBO_MODEL_PATH',
-            value=gazebo_models_path,
+            value=gazebo_model_paths,
         ),
 
-        DeclareLaunchArgument('world', default_value='workshop'),
-        DeclareLaunchArgument('map', default_value='workshop'),
+        DeclareLaunchArgument(
+            'world',
+            default_value=os.path.join(sim_env_dir, 'worlds', 'workshop.world'),
+        ),
+        DeclareLaunchArgument(
+            'map',
+            default_value=os.path.join(sim_env_dir, 'maps', 'workshop', 'workshop.yaml'),
+        ),
         DeclareLaunchArgument('robot_type', default_value='turtlebot3_waffle'),
         DeclareLaunchArgument('x_pose', default_value='0.0'),
         DeclareLaunchArgument('y_pose', default_value='0.0'),
