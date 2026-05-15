@@ -89,11 +89,11 @@ protected:
     const std::string & frame_id,
     const rclcpp::Time & stamp) const;
 
+  int getSizeInCellsX() const;
+  int getSizeInCellsY() const;
+
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
   nav2_costmap_2d::Costmap2D * costmap_;
-  int nx_{0};
-  int ny_{0};
-  int map_size_{0};
   PathPlannerConfig config_;
 };
 
