@@ -4,17 +4,26 @@
  */
 #include "utils/path_planner_factory.h"
 
+#include "graph_planner/dijkstra_planner.h"
+
 namespace rmp::path_planner {
 
 bool PathPlannerFactory::createPlanner(
   const rclcpp_lifecycle::LifecycleNode::SharedPtr & node,
   const std::string & plugin_name,
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> /* costmap_ros */,
+  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros,
   PlannerProps & planner_props)
 {
   planner_props = PlannerProps{};
   planner_props.planner_name = node->declare_parameter<std::string>(
     plugin_name + ".planner_name", "");
+
+  if (planner_props.planner_name == "dijkstra") {
+    planner_props.planner_ptr = std::make_shared<DijkstraPathPlanner>(std::move(costmap_ros));
+    planner_props.planner_type = kGraphPlanner;
+    RCLCPP_INFO(node->get_logger(), "Using migrated planner '%s'.", planner_props.planner_name.c_str());
+    return true;
+  }
 
   if (!planner_props.planner_name.empty()) {
     RCLCPP_WARN(

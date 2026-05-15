@@ -6,6 +6,9 @@
 #define RMP_PATH_PLANNER_PATH_PLANNER_H_
 
 #include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav2_costmap_2d/nav2_costmap_2d/costmap_2d_ros.hpp"
@@ -13,19 +16,85 @@
 
 namespace rmp::path_planner {
 
+struct Point3d
+{
+  double x{0.0};
+  double y{0.0};
+  double theta{0.0};
+};
+
+using Points3d = std::vector<Point3d>;
+
+struct PathPlannerConfig
+{
+  double default_tolerance{2.0};
+  double obstacle_inflation_factor{1.0};
+  bool outline_map{false};
+};
+
 class PathPlanner
 {
 public:
   explicit PathPlanner(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros);
   virtual ~PathPlanner() = default;
 
-  virtual nav_msgs::msg::Path createPlan(
+  virtual bool plan(
+    const Point3d & start,
+    const Point3d & goal,
+    Points3d * path,
+    Points3d * expand) = 0;
+
+  nav_msgs::msg::Path createPlan(
     const geometry_msgs::msg::PoseStamped & start,
-    const geometry_msgs::msg::PoseStamped & goal) = 0;
+    const geometry_msgs::msg::PoseStamped & goal);
+
+  const PathPlannerConfig & config() const;
+  nav2_costmap_2d::Costmap2D * getCostMap() const;
+  int getMapSize() const;
+  int grid2Index(int x, int y) const;
+  void index2Grid(int i, int & x, int & y) const;
+  bool world2Map(double wx, double wy, double & mx, double & my) const;
+  void map2World(double mx, double my, double & wx, double & wy) const;
+  void outlineMap();
+  bool validityCheck(double wx, double wy, double & mx, double & my) const;
 
 protected:
+  template<typename NodeT>
+  std::vector<NodeT> convertClosedListToPath(
+    const std::unordered_map<int, NodeT> & closed_list,
+    const NodeT & start,
+    const NodeT & goal) const
+  {
+    std::vector<NodeT> path;
+    auto current = closed_list.find(goal.id);
+    while (current != closed_list.end() && !(current->second == start)) {
+      path.emplace_back(current->second.x, current->second.y);
+      const auto parent = closed_list.find(current->second.parent_id);
+      if (parent == closed_list.end()) {
+        return {};
+      }
+      current = parent;
+    }
+
+    if (current == closed_list.end()) {
+      return {};
+    }
+
+    path.push_back(start);
+    return path;
+  }
+
+  nav_msgs::msg::Path toNavPath(
+    const Points3d & path,
+    const std::string & frame_id,
+    const rclcpp::Time & stamp) const;
+
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
   nav2_costmap_2d::Costmap2D * costmap_;
+  int nx_{0};
+  int ny_{0};
+  int map_size_{0};
+  PathPlannerConfig config_;
 };
 
 }  // namespace rmp::path_planner

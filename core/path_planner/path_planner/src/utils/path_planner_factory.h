@@ -17,6 +17,7 @@ namespace rmp::path_planner {
 enum PlannerType
 {
   kNoPlanner = 0,
+  kGraphPlanner = 1,
 };
 
 class PathPlannerFactory
