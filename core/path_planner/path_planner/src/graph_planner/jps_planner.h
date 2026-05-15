@@ -66,6 +66,7 @@ protected:
 
 private:
   void fillSearchedPointsDebugInfo(const Points3d & expand);
+  Points3d densifyPathInWorld(const Points3d & jump_points) const;
 
   JNode start_;
   JNode goal_;

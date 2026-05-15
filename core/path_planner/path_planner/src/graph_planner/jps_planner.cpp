@@ -21,6 +21,42 @@ JPSPathPlanner::JPSPathPlanner(
 {
 }
 
+Points3d JPSPathPlanner::densifyPathInWorld(const Points3d & jump_points) const
+{
+  if (jump_points.size() < 2) {
+    return jump_points;
+  }
+
+  constexpr double kInterpolationStep = 0.05;
+  Points3d dense_path;
+  dense_path.reserve(jump_points.size() * 4);
+  dense_path.push_back(jump_points.front());
+
+  for (std::size_t i = 1; i < jump_points.size(); ++i) {
+    const auto & prev = jump_points[i - 1];
+    const auto & curr = jump_points[i];
+    const double dx = curr.x - prev.x;
+    const double dy = curr.y - prev.y;
+    const double segment_length = std::hypot(dx, dy);
+
+    if (segment_length <= 1e-6) {
+      continue;
+    }
+
+    const int num_segments = std::max(1, static_cast<int>(std::ceil(segment_length / kInterpolationStep)));
+    for (int step = 1; step <= num_segments; ++step) {
+      const double t = static_cast<double>(step) / static_cast<double>(num_segments);
+      dense_path.push_back({
+        prev.x + dx * t,
+        prev.y + dy * t,
+        std::atan2(dy, dx)
+      });
+    }
+  }
+
+  return dense_path;
+}
+
 void JPSPathPlanner::fillSearchedPointsDebugInfo(const Points3d & expand)
 {
   auto & searched_points = mutableDebugInfo().searched_points;
@@ -116,11 +152,14 @@ bool JPSPathPlanner::plan(
       }
 
       const auto backtrace = convertClosedListToPath(closed_list, start_, goal_);
+      Points3d jump_points_world;
+      jump_points_world.reserve(backtrace.size());
       for (auto iter = backtrace.rbegin(); iter != backtrace.rend(); ++iter) {
         double wx, wy;
         map2World(iter->x, iter->y, wx, wy);
-        path->push_back(Point3d{wx, wy, 0.0});
+        jump_points_world.push_back(Point3d{wx, wy, 0.0});
       }
+      *path = densifyPathInWorld(jump_points_world);
       fillSearchedPointsDebugInfo(*expand);
       return true;
     }
