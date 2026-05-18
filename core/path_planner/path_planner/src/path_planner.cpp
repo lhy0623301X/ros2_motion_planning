@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "common/util/log.h"
 #include "rclcpp/rclcpp.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "utils/path_replanning_utils.h"
@@ -89,6 +90,7 @@ const PathPlannerConfig & PathPlanner::config() const
 void PathPlanner::setConfig(const PathPlannerConfig & config)
 {
   config_ = config;
+  ::apollo::common::util::SetLogEnabled(config_.enable_log);
 }
 
 const common::util::PlannerDebugInfo & PathPlanner::debugInfo() const

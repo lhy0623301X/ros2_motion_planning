@@ -10,6 +10,8 @@
  */
 #include "graph_planner/dstar_planner.h"
 
+#include "common/util/log.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>

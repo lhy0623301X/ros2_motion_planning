@@ -4,6 +4,8 @@
  */
 #include "graph_planner/dijkstra_planner.h"
 
+#include "common/util/log.h"
+
 #include <cmath>
 #include <queue>
 #include <unordered_map>

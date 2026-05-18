@@ -8,6 +8,8 @@
  */
 #include "graph_planner/astar_planner.h"
 
+#include "common/util/log.h"
+
 #include <cmath>
 #include <queue>
 #include <unordered_map>

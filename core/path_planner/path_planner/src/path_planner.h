@@ -39,6 +39,7 @@ struct PathPlannerConfig
   double goal_reuse_tolerance{0.2};
   bool enable_path_reuse{true};
   bool enable_debug_visualization{true};
+  bool enable_log{false};
   bool outline_map{false};
 };
 
