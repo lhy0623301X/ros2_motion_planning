@@ -12,6 +12,7 @@
 #include "graph_planner/hybrid_astar_planner/hybrid_astar_planner.h"
 #include "graph_planner/jps_planner.h"
 #include "graph_planner/lpa_star_planner.h"
+#include "sample_planner/rrt_planner.h"
 
 namespace rmp::path_planner {
 
@@ -57,6 +58,7 @@ bool PathPlannerFactory::createPlanner(
     plugin_name + ".outline_map", config.outline_map);
 
   std::shared_ptr<PathPlanner> planner;
+  bool is_sample_planner = false;
 
   if (planner_props.planner_name == "dijkstra") {
     planner = std::make_shared<DijkstraPathPlanner>(costmap_ros);
@@ -107,12 +109,27 @@ bool PathPlannerFactory::createPlanner(
       plugin_name + ".hybrid_astar.default_graph_size", hybrid_config.default_graph_size);
     hybrid->setHybridConfig(hybrid_config);
     planner = hybrid;
+  } else if (planner_props.planner_name == "RRT") {
+    auto rrt = std::make_shared<RRTPathPlanner>(costmap_ros);
+    SamplePlannerConfig scfg;
+    scfg.sample_points = node->declare_parameter<int>(
+      plugin_name + ".sample_planner.sample_points", scfg.sample_points);
+    scfg.sample_max_distance = node->declare_parameter<double>(
+      plugin_name + ".sample_planner.sample_max_distance", scfg.sample_max_distance);
+    scfg.optimization_radius = node->declare_parameter<double>(
+      plugin_name + ".sample_planner.optimization_radius", scfg.optimization_radius);
+    scfg.optimization_sample_probability = node->declare_parameter<double>(
+      plugin_name + ".sample_planner.optimization_sample_probability",
+      scfg.optimization_sample_probability);
+    rrt->setSampleConfig(scfg);
+    planner = rrt;
+    is_sample_planner = true;
   }
 
   if (planner) {
     planner->setConfig(config);
     planner_props.planner_ptr = planner;
-    planner_props.planner_type = kGraphPlanner;
+    planner_props.planner_type = is_sample_planner ? kSamplePlanner : kGraphPlanner;
     RCLCPP_INFO(node->get_logger(), "Using migrated planner '%s'.", planner_props.planner_name.c_str());
     return true;
   }

@@ -118,7 +118,7 @@ planner_server:
     planner_plugins: ["GridBased"]   # 加载的规划器插件列表
     GridBased:
       plugin: "path_planner/PathPlanner" # 自定义路径规划器插件
-      planner_name: "A*"           # 搜索算法：GBFS、dijkstra、A*、JPS、D*、D* Lite、LPA*、hybrid A*
+      planner_name: "A*"           # 搜索算法：GBFS、dijkstra、A*、JPS、D*、D* Lite、LPA*、hybrid A*、RRT
       enable_log: true                   # 是否开启算法内部日志宏输出
       enable_path_reuse: true            # 是否启用路径复用逻辑
       goal_reuse_tolerance: 0.2          # 只有当前目标与上一帧目标足够接近时，才允许复用旧路径
@@ -143,6 +143,12 @@ planner_server:
         analytic_expansion_max_length: 3.0   # Analytic Expansion 最大尝试距离 [m]
         lambda_h: 2.0                        # 启发式权重因子
         default_graph_size: 100000           # 预分配搜索图大小
+      # -- 采样类规划器共享参数（RRT / RRT* / RRT-Connect / Informed RRT* 共用）--
+      sample_planner:
+        sample_points: 5000                    # 最大采样次数
+        sample_max_distance: 10.0              # 单步扩展最大距离（栅格单元）
+        optimization_radius: 10.0              # RRT* 优化搜索半径（栅格单元）
+        optimization_sample_probability: 0.05  # 朝目标点偏置采样概率（0~1）
 
 # -----------------------------------------------------------------------------
 # Controller Server — 局部轨迹规划与控制器

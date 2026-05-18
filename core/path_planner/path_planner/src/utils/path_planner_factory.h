@@ -18,6 +18,7 @@ enum PlannerType
 {
   kNoPlanner = 0,
   kGraphPlanner = 1,
+  kSamplePlanner = 2,
 };
 
 class PathPlannerFactory
