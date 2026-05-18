@@ -7,6 +7,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(glog REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
 find_package(tf2 REQUIRED)
@@ -26,6 +27,10 @@ add_library(${PROJECT_NAME} SHARED
   ${math_src_files_cpp}
   ${geometry_src_files}
   ${geometry_curve_src_files}
+)
+
+target_link_libraries(${PROJECT_NAME}
+  glog::glog
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -68,6 +73,7 @@ install(
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_dependencies(
+  glog
   rclcpp
   nav2_costmap_2d
   tf2

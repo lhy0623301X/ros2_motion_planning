@@ -7,6 +7,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(common REQUIRED)
+find_package(glog REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav2_core REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
@@ -32,6 +33,10 @@ add_library(${PROJECT_NAME} SHARED
   src/graph_planner/hybrid_astar_planner/node_hybrid.cpp
   src/utils/path_planner_factory.cpp
   src/utils/path_replanning_utils.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}
+  glog::glog
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -77,6 +82,7 @@ install(
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   common
+  glog
   geometry_msgs
   nav2_core
   nav2_costmap_2d

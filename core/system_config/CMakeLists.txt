@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(ament_cmake REQUIRED)
 find_package(common REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(glog REQUIRED)
 find_package(Protobuf 3 REQUIRED)
 
 add_library(${PROJECT_NAME}
@@ -64,6 +65,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 target_link_libraries(${PROJECT_NAME}
+  glog::glog
   ${Protobuf_LIBRARIES}
 )
 
@@ -89,7 +91,7 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
-ament_export_dependencies(common Protobuf ament_index_cpp)
+ament_export_dependencies(common Protobuf ament_index_cpp glog)
 ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})
 
