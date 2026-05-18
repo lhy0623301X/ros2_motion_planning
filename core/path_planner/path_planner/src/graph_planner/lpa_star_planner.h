@@ -75,6 +75,7 @@ private:
   double calculateKey(const LNodePtr s) const;
   bool isCollision(const LNodePtr n1, const LNodePtr n2) const;
   void getNeighbours(const LNodePtr node, std::vector<LNodePtr> & neighbours) const;
+  double calculateObstacleCost(unsigned char cell_cost) const;
   double getCost(const LNodePtr n1, const LNodePtr n2) const;
   void updateVertex(LNodePtr u);
   void computeShortestPath();
