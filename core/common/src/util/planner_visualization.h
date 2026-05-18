@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "nav_msgs/msg/occupancy_grid.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -57,14 +58,22 @@ public:
     const PlannerDebugInfo & debug_info,
     const std::string & frame_id,
     const rclcpp::Time & stamp,
-    double resolution);
+    double resolution,
+    unsigned int width,
+    unsigned int height,
+    double origin_x,
+    double origin_y);
 
 private:
-  visualization_msgs::msg::Marker makeSearchedPointsMarker(
+  nav_msgs::msg::OccupancyGrid makeSearchedPointsGrid(
     const DebugPoints3d & searched_points,
     const std::string & frame_id,
     const rclcpp::Time & stamp,
-    double resolution) const;
+    double resolution,
+    unsigned int width,
+    unsigned int height,
+    double origin_x,
+    double origin_y) const;
 
   visualization_msgs::msg::Marker makeSampledPointsMarker(
     const DebugPoints3d & sampled_points,
@@ -82,6 +91,7 @@ private:
     const std::string & frame_id,
     const rclcpp::Time & stamp) const;
 
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr searched_points_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
 };
 

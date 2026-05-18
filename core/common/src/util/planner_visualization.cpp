@@ -3,7 +3,7 @@
  * @brief Reusable RViz debug visualization for planning algorithms.
  *
  * Visual conventions:
- *   - searched_points: green cubes (explored nodes in search space)
+ *   - searched_points: occupancy grid overlay (explored cells in search space)
  *   - sampled_points:  blue cubes (random/methodical samples)
  *   - tree_edges:      grey thin lines (sampling tree connectivity)
  *   - trajectories:    cyan thicker lines (candidate motion trajectories)
@@ -22,6 +22,8 @@ namespace rmp::common::util {
 
 namespace {
 
+// 将二维栅格索引打包成一个 64 位 key，用于快速去重。
+// 这里按 resolution 量化坐标，保证落在同一 costmap cell 的点只会被记录一次。
 std::int64_t makeGridKey(double x, double y, double resolution)
 {
   const auto grid_x = static_cast<std::int32_t>(std::llround(x / resolution));
@@ -45,6 +47,9 @@ PlannerVisualizer::PlannerVisualizer(
   const rclcpp_lifecycle::LifecycleNode::SharedPtr & node,
   const std::string & topic_name)
 {
+  // 图搜索扩展区域单独发布为 OccupancyGrid，便于在 RViz 中以连续栅格层显示。
+  searched_points_pub_ = node->create_publisher<nav_msgs::msg::OccupancyGrid>(
+    topic_name + "/searched_grid", 1);
   marker_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>(topic_name, 1);
 }
 
@@ -52,16 +57,26 @@ void PlannerVisualizer::publish(
   const PlannerDebugInfo & debug_info,
   const std::string & frame_id,
   const rclcpp::Time & stamp,
-  double resolution)
+  double resolution,
+  unsigned int width,
+  unsigned int height,
+  double origin_x,
+  double origin_y)
 {
   // 无订阅者时跳过计算，节省资源
-  if (marker_pub_->get_subscription_count() == 0) {
+  if (marker_pub_->get_subscription_count() == 0 &&
+      searched_points_pub_->get_subscription_count() == 0)
+  {
     return;
   }
 
+  // searched_points 采用整张 costmap 尺寸的 OccupancyGrid，
+  // 行为上对齐 ros_motion_planning 原项目的 expand zone 可视化。
+  searched_points_pub_->publish(
+    makeSearchedPointsGrid(
+      debug_info.searched_points, frame_id, stamp, resolution, width, height, origin_x, origin_y));
+
   visualization_msgs::msg::MarkerArray marker_array;
-  marker_array.markers.push_back(
-    makeSearchedPointsMarker(debug_info.searched_points, frame_id, stamp, resolution));
   marker_array.markers.push_back(
     makeSampledPointsMarker(debug_info.sampled_points, frame_id, stamp, resolution));
   marker_array.markers.push_back(makeSampledTreeMarker(debug_info.sampled_tree_edges, frame_id, stamp));
@@ -70,47 +85,63 @@ void PlannerVisualizer::publish(
   marker_pub_->publish(marker_array);
 }
 
-visualization_msgs::msg::Marker PlannerVisualizer::makeSearchedPointsMarker(
+nav_msgs::msg::OccupancyGrid PlannerVisualizer::makeSearchedPointsGrid(
   const DebugPoints3d & searched_points,
   const std::string & frame_id,
   const rclcpp::Time & stamp,
-  double resolution) const
+  double resolution,
+  unsigned int width,
+  unsigned int height,
+  double origin_x,
+  double origin_y) const
 {
-  visualization_msgs::msg::Marker marker;
-  marker.header.frame_id = frame_id;
-  marker.header.stamp = stamp;
-  marker.ns = "searched_points";
-  marker.id = 0;
-  marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
-  // 保持轻微重叠，增强连续区域观感，同时保留按栅格去重避免颜色叠深。
-  marker.scale.x = resolution * 1.0;
-  marker.scale.y = resolution * 1.0;
-  marker.scale.z = resolution * 0.2;
-  // 深绿色半透明 — 探索过的节点，低调不遮挡地图
-  marker.color.r = 0.5F;
-  marker.color.g = 0.0F;
-  marker.color.b = 0.0F;
-  marker.color.a = 0.2F;
+  nav_msgs::msg::OccupancyGrid grid;
+  grid.header.frame_id = frame_id;
+  grid.header.stamp = stamp;
+  grid.info.map_load_time = stamp;
+  grid.info.resolution = static_cast<float>(resolution);
+  grid.info.width = width;
+  grid.info.height = height;
+  // OccupancyGrid 的 origin 语义是左下角 cell 的外边界原点，
+  // 而 costmap 的 origin 对应 cell 中心，因此这里减去半个 resolution 做对齐。
+  grid.info.origin.position.x = origin_x - resolution / 2.0;
+  grid.info.origin.position.y = origin_y - resolution / 2.0;
+  grid.info.origin.position.z = 0.0;
+  grid.info.origin.orientation.w = 1.0;
+  grid.data.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0);
 
-  if (searched_points.empty()) {
-    marker.action = visualization_msgs::msg::Marker::DELETE;
-  } else {
-    marker.action = visualization_msgs::msg::Marker::ADD;
-    std::unordered_set<std::int64_t> visited_cells;
-    visited_cells.reserve(searched_points.size());
-
-    for (const auto & point : searched_points) {
-      if (!visited_cells.insert(makeGridKey(point.x, point.y, resolution)).second) {
-        continue;
-      }
-
-      auto geometry_point = toGeometryPoint(point);
-      geometry_point.z = 0.01;  // 略微抬高，避免与地图平面重合产生闪烁
-      marker.points.push_back(geometry_point);
-    }
+  if (searched_points.empty() || width == 0 || height == 0) {
+    return grid;
   }
 
-  return marker;
+  std::unordered_set<std::int64_t> visited_cells;
+  visited_cells.reserve(searched_points.size());
+
+  for (const auto & point : searched_points) {
+    // searched_points 保存的是世界坐标，这里先转换到当前 costmap 原点下的局部坐标。
+    const auto local_x = point.x - origin_x;
+    const auto local_y = point.y - origin_y;
+    const auto key = makeGridKey(local_x, local_y, resolution);
+    if (!visited_cells.insert(key).second) {
+      continue;
+    }
+
+    // 将世界坐标重新量化为 costmap 栅格索引，并写入整张 OccupancyGrid。
+    const auto grid_x = static_cast<int>(std::llround(local_x / resolution));
+    const auto grid_y = static_cast<int>(std::llround(local_y / resolution));
+    if (grid_x < 0 || grid_y < 0 ||
+        grid_x >= static_cast<int>(width) || grid_y >= static_cast<int>(height))
+    {
+      continue;
+    }
+
+    const auto index =
+      static_cast<std::size_t>(grid_y) * static_cast<std::size_t>(width) +
+      static_cast<std::size_t>(grid_x);
+    grid.data[index] = 50;
+  }
+
+  return grid;
 }
 
 visualization_msgs::msg::Marker PlannerVisualizer::makeSampledPointsMarker(
@@ -125,8 +156,9 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSampledPointsMarker(
   marker.ns = "sampled_points";
   marker.id = 1;
   marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
-  marker.scale.x = resolution ;   // 略大于栅格，相邻重叠消除网格线
-  marker.scale.y = resolution ;
+  // 采样点仍用 Marker，和 searched grid 在视觉语义上区分开。
+  marker.scale.x = resolution;
+  marker.scale.y = resolution;
   marker.scale.z = resolution * 0.2;
   // 蓝色半透明 — 采样点，与搜索节点区分
   marker.color.r = 0.2F;

@@ -86,8 +86,15 @@ nav_msgs::msg::Path PathPlannerNode::createPlan(
 
   auto plan = planner_->createPlan(start, goal);
   if (visualizer_ && planner_->config().enable_debug_visualization) {
-    const double resolution = costmap_ros_ ? costmap_ros_->getCostmap()->getResolution() : 0.05;
-    visualizer_->publish(planner_->debugInfo(), global_frame_, goal.header.stamp, resolution);
+    const auto * costmap = costmap_ros_ ? costmap_ros_->getCostmap() : nullptr;
+    const double resolution = costmap ? costmap->getResolution() : 0.05;
+    const unsigned int width = costmap ? costmap->getSizeInCellsX() : 0U;
+    const unsigned int height = costmap ? costmap->getSizeInCellsY() : 0U;
+    const double origin_x = costmap ? costmap->getOriginX() : 0.0;
+    const double origin_y = costmap ? costmap->getOriginY() : 0.0;
+    visualizer_->publish(
+      planner_->debugInfo(), global_frame_, goal.header.stamp, resolution,
+      width, height, origin_x, origin_y);
   }
   return plan;
 }
