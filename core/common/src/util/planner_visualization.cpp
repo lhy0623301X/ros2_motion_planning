@@ -10,12 +10,25 @@
  */
 #include "util/planner_visualization.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <unordered_set>
+
 #include "geometry_msgs/msg/point.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 
 namespace rmp::common::util {
 
 namespace {
+
+std::int64_t makeGridKey(double x, double y, double resolution)
+{
+  const auto grid_x = static_cast<std::int32_t>(std::llround(x / resolution));
+  const auto grid_y = static_cast<std::int32_t>(std::llround(y / resolution));
+  return (static_cast<std::int64_t>(grid_x) << 32) |
+         static_cast<std::uint32_t>(grid_y);
+}
 
 geometry_msgs::msg::Point toGeometryPoint(const DebugPoint3d & point)
 {
@@ -51,8 +64,7 @@ void PlannerVisualizer::publish(
     makeSearchedPointsMarker(debug_info.searched_points, frame_id, stamp, resolution));
   marker_array.markers.push_back(
     makeSampledPointsMarker(debug_info.sampled_points, frame_id, stamp, resolution));
-  marker_array.markers.push_back(
-    makeSampledTreeMarker(debug_info.sampled_tree_edges, frame_id, stamp));
+  marker_array.markers.push_back(makeSampledTreeMarker(debug_info.sampled_tree_edges, frame_id, stamp));
   marker_array.markers.push_back(
     makeSampledTrajectoryMarker(debug_info.sampled_trajectories, frame_id, stamp));
   marker_pub_->publish(marker_array);
@@ -70,12 +82,13 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSearchedPointsMarker(
   marker.ns = "searched_points";
   marker.id = 0;
   marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
-  marker.scale.x = resolution ;   // 略大于栅格，相邻重叠消除网格线
-  marker.scale.y = resolution ;
+  // 保持轻微重叠，增强连续区域观感，同时保留按栅格去重避免颜色叠深。
+  marker.scale.x = resolution * 1.0;
+  marker.scale.y = resolution * 1.0;
   marker.scale.z = resolution * 0.2;
   // 深绿色半透明 — 探索过的节点，低调不遮挡地图
-  marker.color.r = 0.0F;
-  marker.color.g = 0.5F;
+  marker.color.r = 0.5F;
+  marker.color.g = 0.0F;
   marker.color.b = 0.0F;
   marker.color.a = 0.2F;
 
@@ -83,8 +96,17 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSearchedPointsMarker(
     marker.action = visualization_msgs::msg::Marker::DELETE;
   } else {
     marker.action = visualization_msgs::msg::Marker::ADD;
+    std::unordered_set<std::int64_t> visited_cells;
+    visited_cells.reserve(searched_points.size());
+
     for (const auto & point : searched_points) {
-      marker.points.push_back(toGeometryPoint(point));
+      if (!visited_cells.insert(makeGridKey(point.x, point.y, resolution)).second) {
+        continue;
+      }
+
+      auto geometry_point = toGeometryPoint(point);
+      geometry_point.z = 0.01;  // 略微抬高，避免与地图平面重合产生闪烁
+      marker.points.push_back(geometry_point);
     }
   }
 
