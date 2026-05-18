@@ -25,6 +25,7 @@
  *  - 接入 PlannerDebugInfo 可视化
  * =====================================================================
  */
+#include "common/util/log.h"
 #include "common/math/math_helper.h"
 #include "graph_planner/hybrid_astar_planner/hybrid_astar_planner.h"
 
@@ -71,6 +72,12 @@ void HybridAStarPathPlanner::setHybridConfig(const HybridAStarConfig & cfg)
     hybrid_cfg_.non_straight_penalty,
     hybrid_cfg_.reverse_penalty,
     hybrid_cfg_.retrospective_penalty);
+
+  AINFO << "[HybridA*] config loaded: dim_3_size=" << hybrid_cfg_.dim_3_size
+        << ", max_iterations=" << hybrid_cfg_.max_iterations
+        << ", goal_tolerance=" << hybrid_cfg_.goal_tolerance
+        << ", minimum_turning_radius=" << hybrid_cfg_.minimum_turning_radius
+        << ", lambda_h=" << hybrid_cfg_.lambda_h;
 }
 
 // ===================================================================
@@ -104,19 +111,26 @@ bool HybridAStarPathPlanner::plan(
   const Point3d & start, const Point3d & goal,
   Points3d * path, Points3d * expand)
 {
+  AINFO << "[HybridA*] plan request start=(" << start.x << ", " << start.y << ", " <<
+    start.theta << "), goal=(" << goal.x << ", " << goal.y << ", " << goal.theta << ")";
+
   // 步骤 1：将世界坐标转换为地图栅格坐标
   double m_start_x, m_start_y, m_goal_x, m_goal_y;
   if (!validityCheck(start.x, start.y, m_start_x, m_start_y) ||
       !validityCheck(goal.x, goal.y, m_goal_x, m_goal_y))
   {
+    AERROR << "[HybridA*] validityCheck failed for start/goal.";
     return false;
   }
+  ADEBUG << "[HybridA*] map coordinates start=(" << m_start_x << ", " << m_start_y <<
+    "), goal=(" << m_goal_x << ", " << m_goal_y << ")";
   path->clear();
   expand->clear();
 
   // 步骤 2：路径复用 — 如果目标不变且旧路径无碰撞，截取复用
   CPoint3d cgoal(goal.x, goal.y, goal.theta);
   if (!hybrid_last_path_.empty() && stored_goal_ == cgoal) {
+    ADEBUG << "[HybridA*] try reuse previous path, cached size=" << hybrid_last_path_.size();
     bool collision = false;
     CPoints3d::iterator closest_iter = hybrid_last_path_.begin();
     double min_dist = std::numeric_limits<double>::max();
@@ -125,6 +139,7 @@ bool HybridAStarPathPlanner::plan(
       costmap_->worldToMap(it->x(), it->y(), mx, my);
       if (isCollision(CPoint3d(static_cast<double>(mx), static_cast<double>(my)))) {
         collision = true;
+        ADEBUG << "[HybridA*] cached path collision at map=(" << mx << ", " << my << ")";
         break;
       }
       double dist = std::hypot(it->x() - start.x, it->y() - start.y);
@@ -134,12 +149,15 @@ bool HybridAStarPathPlanner::plan(
       }
     }
     if (!collision) {
+      AINFO << "[HybridA*] reuse cached path from nearest index, remain points="
+            << std::distance(closest_iter, hybrid_last_path_.end());
       for (auto it = closest_iter; it != hybrid_last_path_.end(); ++it) {
         path->push_back({it->x(), it->y(), it->theta()});
       }
       hybrid_last_path_ = CPoints3d(closest_iter, hybrid_last_path_.end());
       return true;
     }
+    ADEBUG << "[HybridA*] cached path invalidated, fallback to replanning.";
     hybrid_last_path_.clear();
   }
 
@@ -155,6 +173,8 @@ bool HybridAStarPathPlanner::plan(
 
   CPoints3d cexpand;
   if (createPath(cstart_map, cgoal_map, &path_in_map, &cexpand)) {
+    AINFO << "[HybridA*] search succeeded, map path points=" << path_in_map.size()
+          << ", expanded nodes=" << cexpand.size();
     // 步骤 4：将栅格路径转换回世界坐标（反序，因为 backtrace 是逆序的）
     for (auto it = path_in_map.rbegin(); it != path_in_map.rend(); ++it) {
       double wx, wy;
@@ -183,6 +203,7 @@ bool HybridAStarPathPlanner::plan(
     return true;
   }
 
+  AERROR << "[HybridA*] search failed after expanding " << cexpand.size() << " nodes.";
   return false;
 }
 
@@ -199,9 +220,14 @@ bool HybridAStarPathPlanner::createPath(
   best_heuristic_node_ = {std::numeric_limits<float>::max(), 0};
   auto start_node = addToGraph(getIndex(start));
   auto goal_node  = addToGraph(getIndex(goal));
+  ADEBUG << "[HybridA*] createPath start_index=" << getIndex(start)
+         << ", goal_index=" << getIndex(goal);
 
   // 步骤 2：预计算障碍启发式 — 从目标反向 Dijkstra
-  precomputeObstacleHeuristic(goal_node);
+  if (!precomputeObstacleHeuristic(goal_node)) {
+    AERROR << "[HybridA*] failed to precompute obstacle heuristic.";
+    return false;
+  }
 
   // 步骤 3：将起点加入 Open 列表
   addToQueue(0.0, start_node);
@@ -227,6 +253,20 @@ bool HybridAStarPathPlanner::createPath(
       continue;
     }
     iterations++;
+    const double current_heuristic = getHeuristicCost(current, goal_node);
+    if (current_heuristic < best_heuristic_node_.first) {
+      best_heuristic_node_ = {
+        static_cast<float>(current_heuristic),
+        getIndex(current->pose())};
+    }
+    if (iterations == 1 || iterations % 200 == 0) {
+      ADEBUG << "[HybridA*] iter=" << iterations
+             << ", queue_size=" << queue_.size()
+             << ", current_pose=(" << current->pose().x() << ", " <<
+        current->pose().y() << ", " << current->pose().theta() << ")"
+             << ", current_g=" << current->accumulated_cost()
+             << ", best_heuristic=" << best_heuristic_node_.first;
+    }
 
     // 步骤 5：标记为已访问
     current->visited();
@@ -235,11 +275,13 @@ bool HybridAStarPathPlanner::createPath(
     NodeHybrid::NodePtr expansion_result =
       tryAnalyticExpansion(current, goal_node);
     if (expansion_result != nullptr) {
+      ADEBUG << "[HybridA*] analytic expansion reached goal candidate.";
       current = expansion_result;
     }
 
     // 步骤 7：检查是否到达目标
     if (current == goal_node) {
+      AINFO << "[HybridA*] goal reached directly at iteration " << iterations;
       return backtracePath(current, path);
     } else if (best_heuristic_node_.first <
                static_cast<float>(hybrid_cfg_.goal_tolerance))
@@ -248,6 +290,9 @@ bool HybridAStarPathPlanner::createPath(
       if (approach_iterations >= hybrid_cfg_.max_approach_iterations) {
         NodeHybrid::NodePtr node_ptr =
           &(graph_.at(best_heuristic_node_.second));
+        AWARN << "[HybridA*] reached approach iteration limit, returning best heuristic node."
+              << " best_h=" << best_heuristic_node_.first
+              << ", approach_iterations=" << approach_iterations;
         return backtracePath(node_ptr, path);
       }
     }
@@ -255,6 +300,7 @@ bool HybridAStarPathPlanner::createPath(
     // 步骤 8：扩展邻居
     neighbors.clear();
     getNeighbors(current, neighbors);
+    ADEBUG << "[HybridA*] expand neighbors count=" << neighbors.size();
     for (auto & nb : neighbors) {
       // 步骤 8.1：计算 g 代价
       double g_cost = current->accumulated_cost() +
@@ -277,9 +323,16 @@ bool HybridAStarPathPlanner::createPath(
       static_cast<float>(hybrid_cfg_.goal_tolerance))
   {
     NodeHybrid::NodePtr node_ptr = &(graph_.at(best_heuristic_node_.second));
+    AWARN << "[HybridA*] main loop ended without exact goal, fallback to best heuristic node."
+          << " iterations=" << iterations
+          << ", queue_empty=" << queue_.empty()
+          << ", best_h=" << best_heuristic_node_.first;
     return backtracePath(node_ptr, path);
   }
 
+  AERROR << "[HybridA*] createPath failed: iterations=" << iterations
+         << ", queue_empty=" << queue_.empty()
+         << ", best_h=" << best_heuristic_node_.first;
   return false;
 }
 
@@ -314,7 +367,7 @@ double HybridAStarPathPlanner::getObstacleHeuristic(
   const int width  = static_cast<int>(costmap_->getSizeInCellsX());
 
   if (x < 0 || x >= width || y < 0 || y >= height) {
-    R_ERROR << "Position at " << x << ", " << y << " is out of the map.";
+    AERROR << "[HybridA*] heuristic query out of map: (" << x << ", " << y << ")";
     return std::numeric_limits<double>::max();
   }
 
@@ -346,7 +399,7 @@ double HybridAStarPathPlanner::getDistanceHeuristic(
     return dist;
   }
 
-  R_WARN << "Heuristic curve generation failed.";
+  AWARN << "[HybridA*] heuristic Dubins generation failed.";
   return -1.0;
 }
 
@@ -362,7 +415,7 @@ bool HybridAStarPathPlanner::precomputeObstacleHeuristic(
   const int width  = static_cast<int>(costmap_->getSizeInCellsX());
 
   if (isCollision(goal->pose())) {
-    R_ERROR << "Goal not in free space";
+    AERROR << "[HybridA*] goal pose is not in free space.";
     return false;
   }
 
@@ -414,6 +467,8 @@ bool HybridAStarPathPlanner::precomputeObstacleHeuristic(
       }
     }
   }
+  ADEBUG << "[HybridA*] obstacle heuristic precomputation finished for goal=("
+         << goal_x << ", " << goal_y << ")";
   return true;
 }
 
@@ -428,6 +483,7 @@ NodeHybrid::NodePtr HybridAStarPathPlanner::tryAnalyticExpansion(
   if (getHeuristicCost(node, goal) >
       hybrid_cfg_.analytic_expansion_max_length / costmap_->getResolution())
   {
+    ADEBUG << "[HybridA*] analytic expansion skipped by distance threshold.";
     return nullptr;
   }
 
@@ -449,6 +505,8 @@ NodeHybrid::NodePtr HybridAStarPathPlanner::tryAnalyticExpansion(
       pose.setTheta(
         static_cast<double>(motion_table_.getOrientationBin(pose.theta())));
       if (isCollision(pose)) {
+        ADEBUG << "[HybridA*] analytic expansion collision at pose=("
+               << pose.x() << ", " << pose.y() << ", " << pose.theta() << ")";
         return nullptr;
       }
       auto * n = new NodeHybrid(getIndex(pose));
@@ -460,9 +518,12 @@ NodeHybrid::NodePtr HybridAStarPathPlanner::tryAnalyticExpansion(
     }
     goal->parent = prev;
     goal->visited();
+    ADEBUG << "[HybridA*] analytic expansion success, intermediate nodes="
+           << expansions_node_.size();
     return goal;
   }
 
+  ADEBUG << "[HybridA*] analytic expansion curve generation failed.";
   return nullptr;
 }
 
@@ -473,6 +534,7 @@ bool HybridAStarPathPlanner::backtracePath(
   NodeHybrid::NodePtr & node, CPoints3d * path)
 {
   if (!node->parent) {
+    AERROR << "[HybridA*] backtrace failed: goal node has no parent.";
     return false;
   }
 
@@ -490,6 +552,7 @@ bool HybridAStarPathPlanner::backtracePath(
   path->back().setTheta(
     motion_table_.getAngleFromBin(
       static_cast<int>(path->back().theta())));
+  ADEBUG << "[HybridA*] backtrace completed, path size=" << path->size();
   return true;
 }
 
