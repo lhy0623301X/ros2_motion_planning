@@ -1,36 +1,21 @@
 /**
  * @file hybrid_astar_planner.h
- * @brief Hybrid A* 路径规划器 — 从 ROS1 迁移至 ROS2 Nav2。
- *
- * Hybrid A* 在标准 A* 的基础上引入连续朝向维度，
- * 使用 Dubins 曲线作为运动原语和启发式函数，
- * 在考虑车辆运动学约束的同时搜索全局最优路径。
- *
- * 与 2D 图搜索算法的核心区别：
- *   - 搜索空间为 3D (x, y, theta)，节点索引由三维量化
- *   - 邻居扩展基于运动原语（直行/左转/右转），而非网格 4/8 连通
- *   - 启发式 = max(障碍启发, 距离启发)
- *     · 障碍启发：从目标反向 Dijkstra 忽略朝向的 2D 代价场
- *     · 距离启发：Dubins 曲线长度（考虑转弯半径约束）
- *   - 支持 Analytic Expansion：当距离目标足够近时，
- *     尝试用 Dubins 曲线直接连接到目标，加速收敛
+ * @brief Hybrid A* global planner migrated from ROS1 to ROS2 Nav2.
  */
-#ifndef RMP_PATH_PLANNER_HYBRID_ASTAR_PLANNER_H_
-#define RMP_PATH_PLANNER_HYBRID_ASTAR_PLANNER_H_
+#ifndef RMP_PATH_PLANNER_GRAPH_PLANNER_HYBRID_ASTAR_PLANNER_H_
+#define RMP_PATH_PLANNER_GRAPH_PLANNER_HYBRID_ASTAR_PLANNER_H_
 
+#include <memory>
 #include <queue>
 #include <unordered_map>
 #include <vector>
 
 #include "common/structure/node.h"
-#include "path_planner.h"
 #include "graph_planner/hybrid_astar_planner/node_hybrid.h"
+#include "path_planner.h"
 
 namespace rmp::path_planner {
 
-/**
- * @brief Hybrid A* 专用配置参数（通过工厂从 ROS2 参数读取）
- */
 struct HybridAStarConfig
 {
   int dim_3_size{72};
@@ -48,13 +33,16 @@ struct HybridAStarConfig
   int default_graph_size{100000};
 };
 
-class HybridAStarPathPlanner : public PathPlanner {
+class HybridAStarPathPlanner : public PathPlanner
+{
 public:
   using QueueNode = std::pair<double, NodeHybrid::NodePtr>;
 
-  struct NodeComparator {
-    bool operator()(const QueueNode & a, const QueueNode & b) const {
-      return a.first > b.first;
+  struct NodeComparator
+  {
+    bool operator()(const QueueNode & lhs, const QueueNode & rhs) const
+    {
+      return lhs.first > rhs.first;
     }
   };
 
@@ -63,7 +51,7 @@ public:
 
   explicit HybridAStarPathPlanner(
     std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros);
-  ~HybridAStarPathPlanner() override = default;
+  ~HybridAStarPathPlanner() override;
 
   bool plan(
     const Point3d & start,
@@ -71,14 +59,12 @@ public:
     Points3d * path,
     Points3d * expand) override;
 
-  void setHybridConfig(const HybridAStarConfig & cfg);
-
-  // ---- 3D 索引 ↔ 位姿 互转（基于 motion_table_ 的量化参数） ----
+  void setHybridConfig(const HybridAStarConfig & config);
 
   static rmp::common::geometry::Point3d getPose(uint64_t index);
   static uint64_t getIndex(const rmp::common::geometry::Point3d & pose);
 
-protected:
+private:
   bool createPath(
     const rmp::common::geometry::Point3d & start,
     const rmp::common::geometry::Point3d & goal,
@@ -88,39 +74,30 @@ protected:
   double getHeuristicCost(
     const NodeHybrid::NodePtr & node,
     const NodeHybrid::NodePtr & goal) const;
-
   double getObstacleHeuristic(const NodeHybrid::NodePtr & node) const;
-
   double getDistanceHeuristic(
     const NodeHybrid::NodePtr & node,
     const NodeHybrid::NodePtr & goal) const;
-
   bool precomputeObstacleHeuristic(const NodeHybrid::NodePtr & goal);
-
   NodeHybrid::NodePtr tryAnalyticExpansion(
     const NodeHybrid::NodePtr & node,
     const NodeHybrid::NodePtr & goal);
-
-  bool backtracePath(
-    NodeHybrid::NodePtr & node,
-    rmp::common::geometry::Points3d * path);
-
+  bool backtracePath(NodeHybrid::NodePtr & node, rmp::common::geometry::Points3d * path);
   void getNeighbors(
     const NodeHybrid::NodePtr & node,
     std::vector<NodeHybrid::NodePtr> & neighbors);
-
-  bool isCollision(const rmp::common::geometry::Point3d & pose);
-
+  bool isCollision(const rmp::common::geometry::Point3d & pose) const;
   NodeHybrid::NodePtr addToGraph(uint64_t index);
   void clearGraph();
   void addToQueue(double cost, NodeHybrid::NodePtr & node);
   void clearQueue();
-
   bool isReachGoal(
     const NodeHybrid::NodePtr & node,
     const NodeHybrid::NodePtr & goal) const;
+  bool initializeMotionTableFromCostmap();
+  void clearAnalyticExpansionNodes();
+  void fillSearchedPointsDebugInfo(const rmp::common::geometry::Points3d & expand);
 
-protected:
   HybridAStarConfig hybrid_cfg_;
   static HybridAStarMotionTable motion_table_;
   static std::vector<rmp::common::structure::Node<int>> grid_motions_;
@@ -137,4 +114,4 @@ protected:
 
 }  // namespace rmp::path_planner
 
-#endif  // RMP_PATH_PLANNER_HYBRID_ASTAR_PLANNER_H_
+#endif  // RMP_PATH_PLANNER_GRAPH_PLANNER_HYBRID_ASTAR_PLANNER_H_

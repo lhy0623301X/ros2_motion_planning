@@ -10,6 +10,7 @@
 #include "common/util/log.h"
 #include "rclcpp/rclcpp.hpp"
 #include "tf2/LinearMath/Quaternion.h"
+#include "tf2/utils.h"
 #include "utils/path_replanning_utils.h"
 
 namespace rmp::path_planner {
@@ -34,8 +35,14 @@ nav_msgs::msg::Path PathPlanner::createPlan(
   const geometry_msgs::msg::PoseStamped & goal)
 {
   clearDebugInfo();
-  const Point3d current_start{start.pose.position.x, start.pose.position.y, 0.0};
-  const Point3d current_goal{goal.pose.position.x, goal.pose.position.y, 0.0};
+  const Point3d current_start{
+    start.pose.position.x,
+    start.pose.position.y,
+    tf2::getYaw(start.pose.orientation)};
+  const Point3d current_goal{
+    goal.pose.position.x,
+    goal.pose.position.y,
+    tf2::getYaw(goal.pose.orientation)};
 
   // 步骤 1：如果上一帧路径存在，先判断当前目标是否与上一帧目标一致。
   // 只有目标未明显变化时，旧路径复用才有意义；一旦换了目标，就必须重规划。
