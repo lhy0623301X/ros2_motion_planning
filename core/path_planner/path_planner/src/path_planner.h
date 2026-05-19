@@ -40,6 +40,7 @@ struct PathPlannerConfig
   bool enable_path_reuse{true};
   bool enable_path_smoother{false};
   std::string path_smoother_type{"BSplineCurve"};
+  double path_smoother_downsample_factor{4.0};
   bool enable_debug_visualization{true};
   bool enable_log{false};
   bool outline_map{false};

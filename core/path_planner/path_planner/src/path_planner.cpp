@@ -154,8 +154,10 @@ nav_msgs::msg::Path PathPlanner::createPlan(
     utils::PathSmootherConfig smoother_config;
     smoother_config.type = parseSmootherType(config_.path_smoother_type);
     smoother_config.step = costmap_ ? costmap_->getResolution() : smoother_config.step;
+    smoother_config.downsample_factor = config_.path_smoother_downsample_factor;
     if (utils::PathSmoother::smooth(path, smoothed_path, smoother_config)) {
       AINFO << "[PathPlanner] path smoother applied: type=" << config_.path_smoother_type
+            << ", downsample_factor=" << config_.path_smoother_downsample_factor
             << ", raw_points=" << path.size()
             << ", smoothed_points=" << smoothed_path.size();
       path = std::move(smoothed_path);

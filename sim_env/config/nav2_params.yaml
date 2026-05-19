@@ -119,14 +119,15 @@ planner_server:
     GridBased:
       plugin: "path_planner/PathPlanner" # 自定义路径规划器插件
       planner_name: "A*"           # 搜索算法：GBFS、dijkstra、A*、JPS、D*、D* Lite、LPA*、hybrid A*
+      enable_log: true                   # 是否开启算法内部日志宏输出
+      enable_path_reuse: true            # 是否启用路径复用逻辑
+      goal_reuse_tolerance: 0.2          # 只有当前目标与上一帧目标足够接近时，才允许复用旧路径
+      replanning_distance: 0.5           # 若当前位置距离上一帧路径最近点小于该阈值，则优先复用旧路径
       obstacle_cost_weight: 3.0          # 障碍物邻近代价权重，越大越倾向于远离障碍物
       planning_safety_margin: 0.25       # 规划额外安全边界[m]，所有算法统一使用
-      enable_path_reuse: true            # 是否启用路径复用逻辑
       enable_path_smoother: true        # 是否对全局路径做曲线平滑
-      path_smoother_type: "BezierCurve" # 平滑曲线：BezierCurve、BSplineCurve、CubicSplineCurve
-      enable_log: true                   # 是否开启算法内部日志宏输出
-      replanning_distance: 0.5           # 若当前位置距离上一帧路径最近点小于该阈值，则优先复用旧路径
-      goal_reuse_tolerance: 0.2          # 只有当前目标与上一帧目标足够接近时，才允许复用旧路径
+      path_smoother_type: "CubicSplineCurve" # 平滑曲线：BezierCurve、BSplineCurve、CubicSplineCurve
+      path_smoother_downsample_factor: 10.0 # 平滑前降采样倍率，关键点间距约为 resolution * factor
       # -- Hybrid A* 专用参数（仅当 planner_name 为 hybrid_astar 时生效）--
       hybrid_astar:
         dim_3_size: 72                       # 朝向角量化份数（72 = 5°/bin）

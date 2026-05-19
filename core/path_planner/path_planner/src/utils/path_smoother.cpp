@@ -49,6 +49,30 @@ double pathLength(const Points3d & path)
   return length;
 }
 
+Points3d downsamplePath(const Points3d & path, double min_spacing)
+{
+  if (path.size() < 3 || min_spacing <= 1e-6) {
+    return path;
+  }
+
+  Points3d downsampled_path;
+  downsampled_path.reserve(path.size());
+  downsampled_path.push_back(path.front());
+
+  double distance_since_last_keep = 0.0;
+  for (std::size_t i = 1; i + 1 < path.size(); ++i) {
+    distance_since_last_keep +=
+      std::hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+    if (distance_since_last_keep >= min_spacing) {
+      downsampled_path.push_back(path[i]);
+      distance_since_last_keep = 0.0;
+    }
+  }
+
+  downsampled_path.push_back(path.back());
+  return downsampled_path;
+}
+
 bool finishSmoothing(
   const common::geometry::Points3d & common_smoothed_path,
   const Points3d & input_path,
@@ -88,13 +112,21 @@ bool PathSmoother::smooth(
     return false;
   }
 
+  const double downsample_spacing =
+    normalizedStep(config.step) * std::max(1.0, config.downsample_factor);
+  const auto smoothing_input = downsamplePath(input_path, downsample_spacing);
+  if (smoothing_input.size() < 4) {
+    smoothed_path = input_path;
+    return false;
+  }
+
   switch (config.type) {
     case PathSmootherType::BEZIER:
-      return runBezier(input_path, smoothed_path, config);
+      return runBezier(smoothing_input, smoothed_path, config);
     case PathSmootherType::BSPLINE:
-      return runBSpline(input_path, smoothed_path, config);
+      return runBSpline(smoothing_input, smoothed_path, config);
     case PathSmootherType::CUBIC_SPLINE:
-      return runCubicSpline(input_path, smoothed_path, config);
+      return runCubicSpline(smoothing_input, smoothed_path, config);
   }
 
   smoothed_path = input_path;

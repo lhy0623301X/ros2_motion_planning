@@ -47,6 +47,8 @@ bool PathPlannerFactory::createPlanner(
     plugin_name + ".enable_path_smoother", config.enable_path_smoother);
   config.path_smoother_type = node->declare_parameter<std::string>(
     plugin_name + ".path_smoother_type", config.path_smoother_type);
+  config.path_smoother_downsample_factor = node->declare_parameter<double>(
+    plugin_name + ".path_smoother_downsample_factor", config.path_smoother_downsample_factor);
   config.enable_debug_visualization = node->declare_parameter<bool>(
     "enable_debug_visualization", config.enable_debug_visualization);
   config.enable_log = node->declare_parameter<bool>(
