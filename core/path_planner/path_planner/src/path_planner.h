@@ -105,6 +105,7 @@ protected:
 
   int getSizeInCellsX() const;
   int getSizeInCellsY() const;
+  bool isPathCollisionFree(const Points3d & path) const;
   common::util::PlannerDebugInfo & mutableDebugInfo();
   void clearDebugInfo();
 

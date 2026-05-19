@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
+#include "common/geometry/point.h"
 #include "common/util/log.h"
 #include "rclcpp/rclcpp.hpp"
 #include "tf2/LinearMath/Quaternion.h"
@@ -20,6 +22,45 @@ namespace {
 double calcPlanarDistance(const Point3d & lhs, const Point3d & rhs)
 {
   return std::hypot(lhs.x - rhs.x, lhs.y - rhs.y);
+}
+
+bool hasBlockedCellOnLine(
+  const common::geometry::Point2i & from,
+  const common::geometry::Point2i & to,
+  const std::function<bool(int, int)> & is_blocked)
+{
+  int x0 = from.x();
+  int y0 = from.y();
+  const int x1 = to.x();
+  const int y1 = to.y();
+
+  const int dx = std::abs(x1 - x0);
+  const int sx = x0 < x1 ? 1 : -1;
+  const int dy = -std::abs(y1 - y0);
+  const int sy = y0 < y1 ? 1 : -1;
+  int error = dx + dy;
+
+  while (true) {
+    if (is_blocked(x0, y0)) {
+      return true;
+    }
+
+    if (x0 == x1 && y0 == y1) {
+      break;
+    }
+
+    const int error2 = 2 * error;
+    if (error2 >= dy) {
+      error += dy;
+      x0 += sx;
+    }
+    if (error2 <= dx) {
+      error += dx;
+      y0 += sy;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace
@@ -83,6 +124,7 @@ nav_msgs::msg::Path PathPlanner::createPlan(
   }
 
   // 步骤 5：保存本次新生成的路径和对应目标，供下一帧判断是否需要重规划。
+  // PathPlanner 层的统一碰撞验收暂时关闭，碰撞过滤交回各具体规划算法内部处理。
   last_path_ = path;
   last_goal_ = current_goal;
   has_last_goal_ = true;
@@ -269,6 +311,79 @@ int PathPlanner::getSizeInCellsX() const
 int PathPlanner::getSizeInCellsY() const
 {
   return costmap_ ? static_cast<int>(costmap_->getSizeInCellsY()) : 0;
+}
+
+bool PathPlanner::isPathCollisionFree(const Points3d & path) const
+{
+  if (path.empty()) {
+    AWARN << "[PathPlanner] collision check failed: path is empty.";
+    return false;
+  }
+
+  if (!costmap_ || !costmap_ros_) {
+    AERROR << "[PathPlanner] collision check failed: costmap is null.";
+    return false;
+  }
+
+  std::vector<common::geometry::Point2i> grid_path;
+  grid_path.reserve(path.size());
+  const double lethal_threshold =
+    nav2_costmap_2d::LETHAL_OBSTACLE * config_.obstacle_inflation_factor;
+  const auto * char_map = costmap_->getCharMap();
+
+  auto is_grid_cell_blocked = [&](int gx, int gy) {
+    if (gx < 0 || gy < 0 || gx >= getSizeInCellsX() || gy >= getSizeInCellsY()) {
+      return true;
+    }
+
+    const int index = grid2Index(gx, gy);
+    return char_map[index] >= lethal_threshold;
+  };
+
+  for (std::size_t i = 0; i < path.size(); ++i) {
+    double mx;
+    double my;
+    if (!world2Map(path[i].x, path[i].y, mx, my)) {
+      AWARN << "[PathPlanner] collision check failed: path point out of map. index="
+            << i << ", world=(" << path[i].x << ", " << path[i].y << ")";
+      return false;
+    }
+
+    const int gx = static_cast<int>(mx);
+    const int gy = static_cast<int>(my);
+    if (is_grid_cell_blocked(gx, gy)) {
+      AWARN << "[PathPlanner] collision check failed: path point hits lethal obstacle. index="
+            << i << ", grid=(" << gx << ", " << gy << ")"
+            << ", world=(" << path[i].x << ", " << path[i].y << ")";
+      return false;
+    }
+
+    if (!isNodeCollisionFree(gx, gy)) {
+      AWARN << "[PathPlanner] collision check failed: path point violates safety margin. index="
+            << i << ", grid=(" << gx << ", " << gy << ")"
+            << ", world=(" << path[i].x << ", " << path[i].y << ")";
+      return false;
+    }
+
+    grid_path.emplace_back(gx, gy);
+  }
+
+  auto is_segment_cell_blocked = [&](int gx, int gy) {
+    return is_grid_cell_blocked(gx, gy) || !isNodeCollisionFree(gx, gy);
+  };
+
+  for (std::size_t i = 1; i < grid_path.size(); ++i) {
+    if (hasBlockedCellOnLine(grid_path[i - 1], grid_path[i], is_segment_cell_blocked)) {
+      AWARN << "[PathPlanner] collision check failed: segment between path points is blocked. "
+            << "segment=(" << (i - 1) << " -> " << i << ")"
+            << ", from_grid=(" << grid_path[i - 1].x() << ", " << grid_path[i - 1].y() << ")"
+            << ", to_grid=(" << grid_path[i].x() << ", " << grid_path[i].y() << ")";
+      return false;
+    }
+  }
+
+  AINFO << "[PathPlanner] unified collision check passed: path_points=" << path.size();
+  return true;
 }
 
 common::util::PlannerDebugInfo & PathPlanner::mutableDebugInfo()

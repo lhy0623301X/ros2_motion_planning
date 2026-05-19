@@ -193,11 +193,12 @@ bool HybridAStarPathPlanner::plan(
 
   // 步骤 4：回溯结果是从目标到起点，反向输出并转换回世界坐标。
   for (auto iter = path_in_map.rbegin(); iter != path_in_map.rend(); ++iter) {
+    // Hybrid A* 的节点索引、启发式地图和碰撞检测都按 costmap 栅格节点解释。
+    // 输出到世界坐标时应使用栅格中心点，即 origin + (map + 0.5) * resolution，
+    // 与 Costmap2D::mapToWorld 和其他 2D planner 的路径坐标语义保持一致。
     double wx;
     double wy;
-    costmap_->mapToWorld(
-      static_cast<unsigned int>(iter->x()),
-      static_cast<unsigned int>(iter->y()), wx, wy);
+    map2World(iter->x(), iter->y(), wx, wy);
     path->push_back({wx, wy, iter->theta()});
   }
 
