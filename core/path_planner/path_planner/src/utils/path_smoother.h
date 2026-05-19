@@ -20,7 +20,7 @@ struct PathSmootherConfig
 {
   PathSmootherType type{PathSmootherType::BSPLINE};
   double step{0.1};
-  double bezier_offset{3.0};
+  double bezier_offset{0.5};
   int bspline_order{3};
   int bspline_param_mode{2};
   int bspline_mode{0};

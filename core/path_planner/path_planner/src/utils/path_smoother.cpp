@@ -64,6 +64,15 @@ bool finishSmoothing(
     smoothed_path.front() = input_path.front();
     smoothed_path.back() = input_path.back();
   }
+
+  if (!std::all_of(smoothed_path.begin(), smoothed_path.end(), [](const Point3d & point) {
+      return std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.theta);
+    }))
+  {
+    smoothed_path = input_path;
+    return false;
+  }
+
   return true;
 }
 
@@ -97,13 +106,55 @@ bool PathSmoother::runBezier(
   Points3d & smoothed_path,
   const PathSmootherConfig & config)
 {
+  const double step = normalizedStep(config.step);
+  const double offset = std::clamp(config.bezier_offset, 1e-3, 1.0);
   common::geometry::BezierCurve smoother(
-    normalizedStep(config.step),
-    std::max(config.bezier_offset, 1e-3));
+    step,
+    offset);
+
   common::geometry::Points3d common_smoothed_path;
-  if (!smoother.run(toCommonPath(input_path), common_smoothed_path)) {
+  common_smoothed_path.reserve(input_path.size());
+  for (std::size_t i = 1; i < input_path.size(); ++i) {
+    const common::geometry::Point3d start(
+      input_path[i - 1].x,
+      input_path[i - 1].y,
+      input_path[i - 1].theta);
+    const common::geometry::Point3d goal(
+      input_path[i].x,
+      input_path[i].y,
+      input_path[i].theta);
+    const double distance = std::hypot(goal.x() - start.x(), goal.y() - start.y());
+    if (distance < 1e-6) {
+      continue;
+    }
+
+    const auto control_points = smoother.getControlPoints(start, goal);
+    const auto sample_count = std::max<std::size_t>(
+      2U,
+      static_cast<std::size_t>(std::ceil(distance / step)) + 1U);
+
+    for (std::size_t j = 0; j < sample_count; ++j) {
+      if (i > 1 && j == 0) {
+        continue;
+      }
+
+      const double t = static_cast<double>(j) / static_cast<double>(sample_count - 1U);
+      const auto waypoint = smoother.bezier(t, control_points);
+      common_smoothed_path.emplace_back(waypoint.x(), waypoint.y(), 0.0);
+    }
+  }
+
+  if (common_smoothed_path.size() < 2) {
     smoothed_path = input_path;
     return false;
+  }
+
+  common_smoothed_path.front().setTheta(input_path.front().theta);
+  common_smoothed_path.back().setTheta(input_path.back().theta);
+  for (std::size_t i = 1; i + 1 < common_smoothed_path.size(); ++i) {
+    const double dx = common_smoothed_path[i + 1].x() - common_smoothed_path[i - 1].x();
+    const double dy = common_smoothed_path[i + 1].y() - common_smoothed_path[i - 1].y();
+    common_smoothed_path[i].setTheta(std::atan2(dy, dx));
   }
 
   return finishSmoothing(common_smoothed_path, input_path, smoothed_path);
