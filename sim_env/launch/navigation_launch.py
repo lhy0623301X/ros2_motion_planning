@@ -14,12 +14,16 @@ def generate_launch_description():
 
     map_name = LaunchConfiguration('map')
     params_file = LaunchConfiguration('params_file')
+    controller_params_file = LaunchConfiguration('controller_params_file')
     use_sim_time = LaunchConfiguration('use_sim_time')
     x_pose = LaunchConfiguration('x_pose')
     y_pose = LaunchConfiguration('y_pose')
     yaw = LaunchConfiguration('yaw')
 
     default_params_file = os.path.join(sim_env_dir, 'config', 'nav2_params.yaml')
+    default_controller_params_file = os.path.join(
+        sim_env_dir, 'config', 'controller_params.yaml'
+    )
 
     param_substitutions = {'use_sim_time': use_sim_time}
     configured_params = RewrittenYaml(
@@ -43,6 +47,10 @@ def generate_launch_description():
             default_value=os.path.join(sim_env_dir, 'maps', 'workshop', 'workshop.yaml'),
         ),
         DeclareLaunchArgument('params_file', default_value=default_params_file),
+        DeclareLaunchArgument(
+            'controller_params_file',
+            default_value=default_controller_params_file,
+        ),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('x_pose', default_value='0.0'),
         DeclareLaunchArgument('y_pose', default_value='0.0'),
@@ -87,7 +95,10 @@ def generate_launch_description():
             executable='controller_server',
             name='controller_server',
             output='screen',
-            parameters=[configured_params],
+            parameters=[
+                configured_params,
+                controller_params_file,
+            ],
         ),
 
         Node(

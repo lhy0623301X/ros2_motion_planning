@@ -30,6 +30,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     rviz = LaunchConfiguration('rviz')
     params_file = LaunchConfiguration('params_file')
+    controller_params_file = LaunchConfiguration('controller_params_file')
     nav2_start_delay = LaunchConfiguration('nav2_start_delay')
 
     gazebo_model_paths = os.path.join(sim_env_dir, 'models')
@@ -58,6 +59,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'params_file',
             default_value="/home/lhy/projects_files/ros2_motion_planning/src/sim_env/config/nav2_params.yaml",
+        ),
+        DeclareLaunchArgument(
+            'controller_params_file',
+            default_value="/home/lhy/projects_files/ros2_motion_planning/src/sim_env/config/controller_params.yaml",
         ),
 
         IncludeLaunchDescription(
@@ -92,6 +97,7 @@ def generate_launch_description():
                     launch_arguments={
                         'map': map_name,
                         'params_file': params_file,
+                        'controller_params_file': controller_params_file,
                         'x_pose': x_pose,
                         'y_pose': y_pose,
                         'yaw': yaw,

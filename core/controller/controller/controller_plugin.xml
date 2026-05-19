@@ -1,0 +1,8 @@
+<library path="controller">
+  <class
+    name="controller/Controller"
+    type="rmp::controller::ControllerNode"
+    base_class_type="nav2_core::Controller">
+    <description>Unified controller plugin with internal controller algorithm factory.</description>
+  </class>
+</library>

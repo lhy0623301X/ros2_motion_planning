@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>controller</name>
+  <version>0.1.0</version>
+  <description>Unified Nav2 controller plugin with internal controller factory.</description>
+  <maintainer email="todo@example.com">ros2_motion_planning</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>nav2_core</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>nav_msgs</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <nav2_core plugin="${prefix}/controller_plugin.xml" />
+  </export>
+</package>

@@ -182,7 +182,7 @@ controller_server:
 
     # -- DWB局部规划器（动态窗口法变体）--
     FollowPath:
-      plugin: "dwb_core::DWBLocalPlanner"
+      plugin: "controller/Controller"     #controller/Controller  、 dwb_core::DWBLocalPlanner
       debug_trajectory_details: true  # 发布调试轨迹数据供RViz可视化
 
       # 速度边界
