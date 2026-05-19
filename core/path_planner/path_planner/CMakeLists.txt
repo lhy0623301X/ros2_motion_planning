@@ -33,6 +33,7 @@ add_library(${PROJECT_NAME} SHARED
   src/graph_planner/hybrid_astar_planner/node_hybrid.cpp
   src/utils/path_planner_factory.cpp
   src/utils/path_replanning_utils.cpp
+  src/utils/path_smoother.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
