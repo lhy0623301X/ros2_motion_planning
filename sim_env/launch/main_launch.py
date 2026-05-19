@@ -57,7 +57,7 @@ def generate_launch_description():
         DeclareLaunchArgument('nav2_start_delay', default_value='5.0'),
         DeclareLaunchArgument(
             'params_file',
-            default_value=os.path.join(sim_env_dir, 'config', 'nav2_params.yaml'),
+            default_value="/home/lhy/projects_files/ros2_motion_planning/src/sim_env/config/nav2_params.yaml",
         ),
 
         IncludeLaunchDescription(

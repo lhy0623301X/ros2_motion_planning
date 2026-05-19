@@ -12,7 +12,10 @@
 #include "graph_planner/hybrid_astar_planner/hybrid_astar_planner.h"
 #include "graph_planner/jps_planner.h"
 #include "graph_planner/lpa_star_planner.h"
+#include "sample_planner/informed_rrt_star_planner.h"
+#include "sample_planner/rrt_connect_planner.h"
 #include "sample_planner/rrt_planner.h"
+#include "sample_planner/rrt_star_planner.h"
 
 namespace rmp::path_planner {
 
@@ -59,6 +62,19 @@ bool PathPlannerFactory::createPlanner(
 
   std::shared_ptr<PathPlanner> planner;
   bool is_sample_planner = false;
+  auto read_sample_config = [&]() {
+    SamplePlannerConfig scfg;
+    scfg.sample_points = node->declare_parameter<int>(
+      plugin_name + ".sample_planner.sample_points", scfg.sample_points);
+    scfg.sample_max_distance = node->declare_parameter<double>(
+      plugin_name + ".sample_planner.sample_max_distance", scfg.sample_max_distance);
+    scfg.optimization_radius = node->declare_parameter<double>(
+      plugin_name + ".sample_planner.optimization_radius", scfg.optimization_radius);
+    scfg.optimization_sample_probability = node->declare_parameter<double>(
+      plugin_name + ".sample_planner.optimization_sample_probability",
+      scfg.optimization_sample_probability);
+    return scfg;
+  };
 
   if (planner_props.planner_name == "dijkstra") {
     planner = std::make_shared<DijkstraPathPlanner>(costmap_ros);
@@ -111,18 +127,29 @@ bool PathPlannerFactory::createPlanner(
     planner = hybrid;
   } else if (planner_props.planner_name == "RRT") {
     auto rrt = std::make_shared<RRTPathPlanner>(costmap_ros);
-    SamplePlannerConfig scfg;
-    scfg.sample_points = node->declare_parameter<int>(
-      plugin_name + ".sample_planner.sample_points", scfg.sample_points);
-    scfg.sample_max_distance = node->declare_parameter<double>(
-      plugin_name + ".sample_planner.sample_max_distance", scfg.sample_max_distance);
-    scfg.optimization_radius = node->declare_parameter<double>(
-      plugin_name + ".sample_planner.optimization_radius", scfg.optimization_radius);
-    scfg.optimization_sample_probability = node->declare_parameter<double>(
-      plugin_name + ".sample_planner.optimization_sample_probability",
-      scfg.optimization_sample_probability);
-    rrt->setSampleConfig(scfg);
+    rrt->setSampleConfig(read_sample_config());
     planner = rrt;
+    is_sample_planner = true;
+  } else if (planner_props.planner_name == "RRT*" ||
+             planner_props.planner_name == "RRT Star")
+  {
+    auto rrt_star = std::make_shared<RRTStarPathPlanner>(costmap_ros);
+    rrt_star->setSampleConfig(read_sample_config());
+    planner = rrt_star;
+    is_sample_planner = true;
+  } else if (planner_props.planner_name == "Informed RRT" ||
+             planner_props.planner_name == "Informed RRT*")
+  {
+    auto informed_rrt = std::make_shared<InformedRRTStarPathPlanner>(costmap_ros);
+    informed_rrt->setSampleConfig(read_sample_config());
+    planner = informed_rrt;
+    is_sample_planner = true;
+  } else if (planner_props.planner_name == "RRT-Connect" ||
+             planner_props.planner_name == "RRT Connect")
+  {
+    auto rrt_connect = std::make_shared<RRTConnectPathPlanner>(costmap_ros);
+    rrt_connect->setSampleConfig(read_sample_config());
+    planner = rrt_connect;
     is_sample_planner = true;
   }
 

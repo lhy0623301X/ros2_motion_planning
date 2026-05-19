@@ -31,7 +31,10 @@ add_library(${PROJECT_NAME} SHARED
   src/graph_planner/hybrid_astar_planner/hybrid_astar_planner.cpp
   src/graph_planner/hybrid_astar_planner/motion_table.cpp
   src/graph_planner/hybrid_astar_planner/node_hybrid.cpp
+  src/sample_planner/informed_rrt_star_planner.cpp
+  src/sample_planner/rrt_connect_planner.cpp
   src/sample_planner/rrt_planner.cpp
+  src/sample_planner/rrt_star_planner.cpp
   src/utils/path_planner_factory.cpp
   src/utils/path_replanning_utils.cpp
   src/utils/path_smoother.cpp
