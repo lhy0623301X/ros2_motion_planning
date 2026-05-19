@@ -164,7 +164,7 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSampledPointsMarker(
   marker.color.r = 0.2F;
   marker.color.g = 0.4F;
   marker.color.b = 0.9F;
-  marker.color.a = 0.3F;
+  marker.color.a = 0.5F;
 
   if (sampled_points.empty()) {
     marker.action = visualization_msgs::msg::Marker::DELETE;
@@ -194,7 +194,7 @@ visualization_msgs::msg::Marker PlannerVisualizer::makeSampledTreeMarker(
   marker.color.r = 0.7F;
   marker.color.g = 0.7F;
   marker.color.b = 0.7F;
-  marker.color.a = 0.4F;
+  marker.color.a = 0.8F;
 
   if (sampled_tree_edges.empty()) {
     marker.action = visualization_msgs::msg::Marker::DELETE;
