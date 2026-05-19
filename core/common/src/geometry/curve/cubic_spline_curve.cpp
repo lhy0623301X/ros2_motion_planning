@@ -16,7 +16,7 @@
  */
 #include <Eigen/Dense>
 
-#include "common/geometry/curve/cubic_spline_curve.h"
+#include "geometry/curve/cubic_spline_curve.h"
 
 namespace rmp::common::geometry
 {

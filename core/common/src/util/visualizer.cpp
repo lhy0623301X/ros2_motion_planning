@@ -16,7 +16,7 @@
  */
 #include <visualization_msgs/msg/marker_array.hpp>
 
-#include "common/util/visualizer.h"
+#include "util/visualizer.h"
 
 namespace rmp::common::util {
 std_msgs::msg::ColorRGBA Visualizer::RED = Visualizer::_colorInit(1.0, 0.0, 0.0, 1.0);

@@ -19,7 +19,7 @@
 
 #include <Eigen/Dense>
 
-#include "common/geometry/curve/curve.h"
+#include "geometry/curve/curve.h"
 
 namespace rmp::common::geometry
 {

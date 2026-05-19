@@ -34,9 +34,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-  $<INSTALL_INTERFACE:include>
   $<INSTALL_INTERFACE:include/common>
   ${EIGEN3_INCLUDE_DIR}
 )
@@ -50,11 +48,6 @@ ament_target_dependencies(${PROJECT_NAME}
   std_msgs
   visualization_msgs
   geometry_msgs
-)
-
-install(
-  DIRECTORY include/
-  DESTINATION include
 )
 
 install(
@@ -84,7 +77,6 @@ ament_export_dependencies(
   geometry_msgs
   Eigen3
 )
-ament_export_include_directories(include)
 ament_export_include_directories(include/common)
 ament_export_libraries(${PROJECT_NAME})
 

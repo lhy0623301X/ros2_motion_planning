@@ -20,7 +20,7 @@
 #include <vector>
 #include <Eigen/Dense>
 
-#include "common/math/math_helper.h"
+#include "math/math_helper.h"
 
 namespace rmp::common::geometry
 {

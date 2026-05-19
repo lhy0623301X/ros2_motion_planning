@@ -16,7 +16,7 @@
  */
 #include <cmath>
 
-#include "common/geometry/angles.h"
+#include "geometry/angles.h"
 
 namespace rmp::common::geometry
 {

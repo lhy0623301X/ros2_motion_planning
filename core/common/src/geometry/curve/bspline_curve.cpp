@@ -16,7 +16,7 @@
  */
 #include <Eigen/Dense>
 #include <cassert>
-#include "common/geometry/curve/bspline_curve.h"
+#include "geometry/curve/bspline_curve.h"
 
 namespace rmp::common::geometry
 {

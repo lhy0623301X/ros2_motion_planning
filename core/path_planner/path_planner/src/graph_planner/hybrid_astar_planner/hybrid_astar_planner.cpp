@@ -9,8 +9,8 @@
 #include <functional>
 #include <limits>
 
-#include "common/math/math_helper.h"
-#include "common/util/log.h"
+#include "math/math_helper.h"
+#include "util/log.h"
 #include "nav2_costmap_2d/cost_values.hpp"
 
 using CPoint3d = rmp::common::geometry::Point3d;

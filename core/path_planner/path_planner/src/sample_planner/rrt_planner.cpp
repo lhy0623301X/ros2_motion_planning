@@ -28,7 +28,7 @@
 #include <cmath>
 #include <limits>
 
-#include "common/util/log.h"
+#include "util/log.h"
 #include "geometry/line_collision_checker.h"
 
 using LineChecker = rmp::common::geometry::LineCollisionChecker;

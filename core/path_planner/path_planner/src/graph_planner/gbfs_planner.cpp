@@ -9,7 +9,7 @@
  */
 #include "graph_planner/gbfs_planner.h"
 
-#include "common/util/log.h"
+#include "util/log.h"
 
 #include <cmath>
 #include <queue>

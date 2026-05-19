@@ -118,7 +118,7 @@ planner_server:
     planner_plugins: ["GridBased"]   # 加载的规划器插件列表
     GridBased:
       plugin: "path_planner/PathPlanner" # 自定义路径规划器插件
-      planner_name: "A*"           # 搜索算法：GBFS、dijkstra、A*、JPS、D*、D* Lite、LPA*、hybrid A*、RRT
+      planner_name: "RRT"           # 搜索算法：GBFS、dijkstra、A*、JPS、D*、D* Lite、LPA*、hybrid A*、RRT
       enable_log: true                   # 是否开启算法内部日志宏输出
       enable_path_reuse: true            # 是否启用路径复用逻辑
       goal_reuse_tolerance: 0.2          # 只有当前目标与上一帧目标足够接近时，才允许复用旧路径

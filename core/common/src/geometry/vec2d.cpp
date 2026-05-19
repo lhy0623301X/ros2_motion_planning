@@ -16,9 +16,9 @@
  */
 #include <cmath>
 
-#include "common/util/log.h"
-#include "common/geometry/vec2d.h"
-#include "common/math/math_helper.h"
+#include "util/log.h"
+#include "geometry/vec2d.h"
+#include "math/math_helper.h"
 
 namespace rmp::common::geometry
 {

@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "common/geometry/curve/curve.h"
+#include "geometry/curve/curve.h"
 #include "graph_planner/hybrid_astar_planner/motions.h"
 
 namespace rmp::path_planner {

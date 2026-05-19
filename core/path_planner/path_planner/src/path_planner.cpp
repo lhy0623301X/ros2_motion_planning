@@ -10,8 +10,8 @@
 #include <functional>
 #include <string>
 
-#include "common/geometry/point.h"
-#include "common/util/log.h"
+#include "geometry/point.h"
+#include "util/log.h"
 #include "rclcpp/rclcpp.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/utils.h"

@@ -17,8 +17,8 @@
 #ifndef RMP_COMMON_GEOMETRY_CURVE_H_
 #define RMP_COMMON_GEOMETRY_CURVE_H_
 
-#include "common/geometry/point.h"
-#include "common/math/math_helper.h"
+#include "geometry/point.h"
+#include "math/math_helper.h"
 
 namespace rmp::common::geometry
 {

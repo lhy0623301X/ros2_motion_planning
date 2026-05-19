@@ -18,7 +18,7 @@
 #include <cmath>
 #include <utility>
 
-#include "common/math/math_helper.h"
+#include "math/math_helper.h"
 
 namespace rmp::common::math
 {

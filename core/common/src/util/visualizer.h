@@ -25,8 +25,8 @@
 #include <std_msgs/msg/color_rgba.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 
-#include "common/geometry/point.h"
-#include "common/structure/singleton.h"
+#include "geometry/point.h"
+#include "structure/singleton.h"
 
 namespace rmp::common::util {
 class Visualizer {

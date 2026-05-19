@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <limits>
 
-#include "common/geometry/point.h"
+#include "geometry/point.h"
 #include "graph_planner/hybrid_astar_planner/motion_table.h"
 #include "graph_planner/hybrid_astar_planner/motions.h"
 

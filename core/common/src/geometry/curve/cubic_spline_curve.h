@@ -17,7 +17,7 @@
 #ifndef RMP_COMMON_GEOMETRY_CUBIC_SPLINE_CURVE_H_
 #define RMP_COMMON_GEOMETRY_CUBIC_SPLINE_CURVE_H_
 
-#include "common/geometry/curve/curve.h"
+#include "geometry/curve/curve.h"
 
 namespace rmp::common::geometry
 {

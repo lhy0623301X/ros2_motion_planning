@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <cmath>
 
-#include "common/geometry/curve/bezier_curve.h"
-#include "common/geometry/curve/bspline_curve.h"
-#include "common/geometry/curve/cubic_spline_curve.h"
+#include "geometry/curve/bezier_curve.h"
+#include "geometry/curve/bspline_curve.h"
+#include "geometry/curve/cubic_spline_curve.h"
 
 namespace rmp::path_planner::utils {
 

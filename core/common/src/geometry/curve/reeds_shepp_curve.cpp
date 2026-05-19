@@ -18,8 +18,8 @@
 #include <cassert>
 #include <iostream>
 
-#include "common/math/math_helper.h"
-#include "common/geometry/curve/reeds_shepp_curve.h"
+#include "math/math_helper.h"
+#include "geometry/curve/reeds_shepp_curve.h"
 
 namespace rmp::common::geometry
 {

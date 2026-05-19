@@ -17,7 +17,7 @@
 #include <cmath>
 #include <vector>
 
-#include "common/util/log.h"
+#include "util/log.h"
 
 namespace rmp::common::geometry
 {

@@ -22,7 +22,7 @@
 #include <limits>
 #include <vector>
 
-#include "common/geometry/vec2d.h"
+#include "geometry/vec2d.h"
 
 namespace rmp::common::math
 {

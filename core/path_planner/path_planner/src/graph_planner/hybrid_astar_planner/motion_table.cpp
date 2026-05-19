@@ -6,7 +6,7 @@
 
 #include <cmath>
 
-#include "common/geometry/curve/dubins_curve.h"
+#include "geometry/curve/dubins_curve.h"
 
 using rmp::common::geometry::DubinsCurve;
 using rmp::common::geometry::Point3d;

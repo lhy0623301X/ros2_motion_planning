@@ -16,7 +16,7 @@
  */
 #include <cassert>
 
-#include "common/geometry/curve/bezier_curve.h"
+#include "geometry/curve/bezier_curve.h"
 
 namespace rmp::common::geometry
 {

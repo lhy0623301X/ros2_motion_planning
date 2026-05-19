@@ -19,8 +19,8 @@
 #include <cassert>
 #include <iostream>
 
-#include "common/math/math_helper.h"
-#include "common/geometry/curve/dubins_curve.h"
+#include "math/math_helper.h"
+#include "geometry/curve/dubins_curve.h"
 
 namespace rmp::common::geometry
 {

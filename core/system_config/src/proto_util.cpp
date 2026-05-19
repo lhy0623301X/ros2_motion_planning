@@ -19,7 +19,7 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/util/json_util.h>
 
-#include "common/util/log.h"
+#include "util/log.h"
 #include "system_config/proto_util.h"
 
 namespace rmp::system_config {

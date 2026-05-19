@@ -16,7 +16,7 @@
  */
 #include "system_config/proto_util.h"
 #include "system_config/system_config.pb.h"
-#include "common/structure/singleton.h"
+#include "structure/singleton.h"
 
 namespace rmp::system_config {
 class SystemConfig {

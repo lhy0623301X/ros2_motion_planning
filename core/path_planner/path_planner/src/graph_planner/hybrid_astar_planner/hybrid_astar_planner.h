@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "common/structure/node.h"
+#include "structure/node.h"
 #include "graph_planner/hybrid_astar_planner/node_hybrid.h"
 #include "path_planner.h"
 

@@ -17,7 +17,7 @@
 #include <cmath>
 #include <Eigen/Dense>
 
-#include "common/geometry/curve/quintic_polynomial.h"
+#include "geometry/curve/quintic_polynomial.h"
 
 namespace rmp::common::geometry
 {

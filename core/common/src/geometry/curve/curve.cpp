@@ -14,8 +14,8 @@
  *
  * ********************************************************
  */
-#include "common/util/log.h"
-#include "common/geometry/curve/curve.h"
+#include "util/log.h"
+#include "geometry/curve/curve.h"
 
 namespace rmp::common::geometry
 {

@@ -10,7 +10,7 @@
  */
 #include "graph_planner/dstar_lite_planner.h"
 
-#include "common/util/log.h"
+#include "util/log.h"
 
 #include <algorithm>
 #include <cmath>

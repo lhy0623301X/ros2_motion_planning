@@ -11,7 +11,7 @@
  * --------------------------------------------------------
  *
  **********************************************************/
-#include "common/geometry/collision_checker.h"
+#include "geometry/collision_checker.h"
 
 namespace rmp::common::geometry
 {
