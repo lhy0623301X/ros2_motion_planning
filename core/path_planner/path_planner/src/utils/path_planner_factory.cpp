@@ -43,6 +43,10 @@ bool PathPlannerFactory::createPlanner(
     plugin_name + ".goal_reuse_tolerance", config.goal_reuse_tolerance);
   config.enable_path_reuse = node->declare_parameter<bool>(
     plugin_name + ".enable_path_reuse", config.enable_path_reuse);
+  config.enable_path_smoother = node->declare_parameter<bool>(
+    plugin_name + ".enable_path_smoother", config.enable_path_smoother);
+  config.path_smoother_type = node->declare_parameter<std::string>(
+    plugin_name + ".path_smoother_type", config.path_smoother_type);
   config.enable_debug_visualization = node->declare_parameter<bool>(
     "enable_debug_visualization", config.enable_debug_visualization);
   config.enable_log = node->declare_parameter<bool>(

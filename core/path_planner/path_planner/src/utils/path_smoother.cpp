@@ -5,6 +5,7 @@
 #include "utils/path_smoother.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "common/geometry/curve/bezier_curve.h"
 #include "common/geometry/curve/bspline_curve.h"
@@ -39,6 +40,15 @@ double normalizedStep(double step)
   return std::max(step, 1e-3);
 }
 
+double pathLength(const Points3d & path)
+{
+  double length = 0.0;
+  for (std::size_t i = 1; i < path.size(); ++i) {
+    length += std::hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+  }
+  return length;
+}
+
 bool finishSmoothing(
   const common::geometry::Points3d & common_smoothed_path,
   const Points3d & input_path,
@@ -50,6 +60,10 @@ bool finishSmoothing(
   }
 
   smoothed_path = fromCommonPath(common_smoothed_path);
+  if (!smoothed_path.empty() && !input_path.empty()) {
+    smoothed_path.front() = input_path.front();
+    smoothed_path.back() = input_path.back();
+  }
   return true;
 }
 
@@ -100,8 +114,16 @@ bool PathSmoother::runBSpline(
   Points3d & smoothed_path,
   const PathSmootherConfig & config)
 {
+  // BSplineCurve 的 step 是 [0, 1] 曲线参数步长，不是米制采样间隔。
+  // 外部配置仍按米制路径间距理解，这里用路径长度换算为归一化步长，
+  // 避免一条长路径只生成十几个点导致控制器难以跟踪。
+  const auto desired_spacing = normalizedStep(config.step);
+  const auto sample_count = std::max<std::size_t>(
+    input_path.size(),
+    static_cast<std::size_t>(std::ceil(pathLength(input_path) / desired_spacing)) + 1U);
+  const auto bspline_step = 1.0 / static_cast<double>(std::max<std::size_t>(sample_count, 2U));
   common::geometry::BSplineCurve smoother(
-    normalizedStep(config.step),
+    bspline_step,
     std::max(config.bspline_order, 1),
     config.bspline_param_mode,
     config.bspline_mode);

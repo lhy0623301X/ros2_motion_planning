@@ -38,6 +38,8 @@ struct PathPlannerConfig
   double replanning_distance{0.5};
   double goal_reuse_tolerance{0.2};
   bool enable_path_reuse{true};
+  bool enable_path_smoother{false};
+  std::string path_smoother_type{"BSplineCurve"};
   bool enable_debug_visualization{true};
   bool enable_log{false};
   bool outline_map{false};

@@ -5,8 +5,10 @@
 #include "path_planner.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <functional>
+#include <string>
 
 #include "common/geometry/point.h"
 #include "common/util/log.h"
@@ -14,6 +16,7 @@
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/utils.h"
 #include "utils/path_replanning_utils.h"
+#include "utils/path_smoother.h"
 
 namespace rmp::path_planner {
 
@@ -61,6 +64,29 @@ bool hasBlockedCellOnLine(
   }
 
   return false;
+}
+
+std::string normalizeSmootherType(std::string type)
+{
+  std::transform(type.begin(), type.end(), type.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  type.erase(std::remove(type.begin(), type.end(), ' '), type.end());
+  type.erase(std::remove(type.begin(), type.end(), '_'), type.end());
+  type.erase(std::remove(type.begin(), type.end(), '-'), type.end());
+  return type;
+}
+
+utils::PathSmootherType parseSmootherType(const std::string & type)
+{
+  const auto normalized_type = normalizeSmootherType(type);
+  if (normalized_type == "bezier" || normalized_type == "beziercurve") {
+    return utils::PathSmootherType::BEZIER;
+  }
+  if (normalized_type == "cubicspline" || normalized_type == "cubicsplinecurve") {
+    return utils::PathSmootherType::CUBIC_SPLINE;
+  }
+  return utils::PathSmootherType::BSPLINE;
 }
 
 }  // namespace
@@ -121,6 +147,22 @@ nav_msgs::msg::Path PathPlanner::createPlan(
     last_path_.clear();
     has_last_goal_ = false;
     return nav_msgs::msg::Path{};
+  }
+
+  if (config_.enable_path_smoother) {
+    Points3d smoothed_path;
+    utils::PathSmootherConfig smoother_config;
+    smoother_config.type = parseSmootherType(config_.path_smoother_type);
+    smoother_config.step = costmap_ ? costmap_->getResolution() : smoother_config.step;
+    if (utils::PathSmoother::smooth(path, smoothed_path, smoother_config)) {
+      AINFO << "[PathPlanner] path smoother applied: type=" << config_.path_smoother_type
+            << ", raw_points=" << path.size()
+            << ", smoothed_points=" << smoothed_path.size();
+      path = std::move(smoothed_path);
+    } else {
+      AWARN << "[PathPlanner] path smoother skipped or failed: type="
+            << config_.path_smoother_type << ", raw_points=" << path.size();
+    }
   }
 
   // 步骤 5：保存本次新生成的路径和对应目标，供下一帧判断是否需要重规划。
