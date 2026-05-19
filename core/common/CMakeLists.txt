@@ -17,10 +17,10 @@ find_package(std_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
-file(GLOB util_src_files src/util/*.cpp)
-file(GLOB math_src_files_cpp src/math/*.cpp)
-file(GLOB geometry_src_files src/geometry/*.cpp)
-file(GLOB geometry_curve_src_files src/geometry/curve/*.cpp)
+file(GLOB util_src_files CONFIGURE_DEPENDS src/util/*.cpp)
+file(GLOB math_src_files_cpp CONFIGURE_DEPENDS src/math/*.cpp)
+file(GLOB geometry_src_files CONFIGURE_DEPENDS src/geometry/*.cpp)
+file(GLOB geometry_curve_src_files CONFIGURE_DEPENDS src/geometry/curve/*.cpp)
 
 add_library(${PROJECT_NAME} SHARED
   ${util_src_files}
