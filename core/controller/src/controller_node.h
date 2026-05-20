@@ -46,6 +46,7 @@ private:
   std::shared_ptr<ControllerAlgorithm> controller_;
   nav_msgs::msg::Path global_plan_;
   utils::HeadingAligner heading_aligner_;
+  ControllerAlgorithm::GoalSpeedLimitConfig goal_speed_limit_cfg_;
 };
 
 }  // namespace rmp::controller

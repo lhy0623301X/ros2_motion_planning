@@ -191,10 +191,12 @@ geometry_msgs::msg::TwistStamped PIDController::computeVelocityCommands(
     target.y - plan_frame_pose.pose.position.y,
     target.x - plan_frame_pose.pose.position.x);
   [[maybe_unused]] const double heading_error = normalizeAngle(target_heading - current_yaw);
+  const double distance_to_goal = planarDistance(plan_frame_pose, global_plan_.poses.back());
   AINFO_EVERY(20) << "[PIDController] tracking: pose=("
                   << plan_frame_pose.pose.position.x << ", " << plan_frame_pose.pose.position.y
                   << ", frame=" << plan_frame_pose.header.frame_id
                   << ", lookahead_dist=" << lookahead_dist
+                  << ", distance_to_goal=" << distance_to_goal
                   << ", target=(" << target.x << ", " << target.y
                   << ", heading=" << target_heading << ")";
   return cmd;

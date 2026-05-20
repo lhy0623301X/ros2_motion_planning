@@ -87,4 +87,46 @@ ControllerAlgorithm::LookaheadPoint ControllerAlgorithm::selectLookaheadPoint(
   return target;
 }
 
+double ControllerAlgorithm::limitLinearSpeedByGoalDistance(
+  double desired_v,
+  double distance_to_goal,
+  const GoalSpeedLimitConfig & config) const
+{
+  if (!config.enabled || distance_to_goal < 0.0) {
+    return desired_v;
+  }
+
+  const double max_linear_velocity = std::max(0.0, config.max_linear_velocity);
+  const double max_decel = std::max(1e-6, config.max_decel);
+  const double direction = desired_v < 0.0 ? -1.0 : 1.0;
+  const double desired_speed = std::fabs(desired_v);
+  const double nominal_slowdown_distance =
+    max_linear_velocity * max_linear_velocity / (2.0 * max_decel);
+  const double slowdown_distance =
+    nominal_slowdown_distance * std::max(1.0, config.brake_distance_scale) +
+    std::max(0.0, config.brake_distance_buffer);
+
+  if (distance_to_goal > slowdown_distance) {
+    return desired_v;
+  }
+
+  const double distance_speed_limit = std::sqrt(2.0 * max_decel * distance_to_goal);
+  double limited_speed = std::min(desired_speed, distance_speed_limit);
+
+  if (limited_speed < config.min_linear_velocity) {
+    limited_speed = 0.0;
+  }
+
+  const double limited_v = direction * limited_speed;
+  AINFO_EVERY(20) << "[ControllerAlgorithm] goal speed limit: distance_to_goal="
+                  << distance_to_goal
+                  << ", slowdown_distance=" << slowdown_distance
+                  << ", nominal_slowdown_distance=" << nominal_slowdown_distance
+                  << ", desired_v=" << desired_v
+                  << ", max_linear_velocity=" << max_linear_velocity
+                  << ", distance_speed_limit=" << distance_speed_limit
+                  << ", limited_v=" << limited_v;
+  return limited_v;
+}
+
 }  // namespace rmp::controller

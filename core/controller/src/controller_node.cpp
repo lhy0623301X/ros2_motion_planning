@@ -4,6 +4,7 @@
  */
 #include "controller_node.h"
 
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
@@ -29,6 +30,19 @@ void ControllerNode::configure(
   controller_name_ = node_->declare_parameter<std::string>(
     plugin_name_ + ".controller_name", "PID");
   heading_aligner_.configure(node_, plugin_name_ + ".heading_aligner.");
+  const auto goal_speed_prefix = plugin_name_ + ".goal_speed_limiter.";
+  goal_speed_limit_cfg_.enabled = node_->declare_parameter<bool>(
+    goal_speed_prefix + "enabled", goal_speed_limit_cfg_.enabled);
+  goal_speed_limit_cfg_.max_linear_velocity = node_->declare_parameter<double>(
+    goal_speed_prefix + "max_linear_velocity", goal_speed_limit_cfg_.max_linear_velocity);
+  goal_speed_limit_cfg_.max_decel = node_->declare_parameter<double>(
+    goal_speed_prefix + "max_decel", goal_speed_limit_cfg_.max_decel);
+  goal_speed_limit_cfg_.brake_distance_scale = node_->declare_parameter<double>(
+    goal_speed_prefix + "brake_distance_scale", goal_speed_limit_cfg_.brake_distance_scale);
+  goal_speed_limit_cfg_.brake_distance_buffer = node_->declare_parameter<double>(
+    goal_speed_prefix + "brake_distance_buffer", goal_speed_limit_cfg_.brake_distance_buffer);
+  goal_speed_limit_cfg_.min_linear_velocity = node_->declare_parameter<double>(
+    goal_speed_prefix + "min_linear_velocity", goal_speed_limit_cfg_.min_linear_velocity);
   controller_ = ControllerFactory::create(controller_name_);
 
   if (!controller_) {
@@ -117,7 +131,15 @@ geometry_msgs::msg::TwistStamped ControllerNode::computeVelocityCommands(
     return cmd;
   }
 
-  return controller_->computeVelocityCommands(plan_frame_pose, velocity, goal_checker);
+  auto tracking_cmd = controller_->computeVelocityCommands(plan_frame_pose, velocity, goal_checker);
+  const double distance_to_goal = std::hypot(
+    goal_pose.pose.position.x - plan_frame_pose.pose.position.x,
+    goal_pose.pose.position.y - plan_frame_pose.pose.position.y);
+  tracking_cmd.twist.linear.x = controller_->limitLinearSpeedByGoalDistance(
+    tracking_cmd.twist.linear.x,
+    distance_to_goal,
+    goal_speed_limit_cfg_);
+  return tracking_cmd;
 }
 
 void ControllerNode::setSpeedLimit(const double & speed_limit, const bool & percentage)

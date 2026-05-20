@@ -176,6 +176,9 @@ geometry_msgs::msg::Twist HeadingAligner::makeRotateCommand(
   double current_w)
 {
   geometry_msgs::msg::Twist cmd;
+  cmd.linear.x = 0.0;
+  cmd.linear.y = 0.0;
+  cmd.linear.z = 0.0;
   const double dt = 1.0 / std::max(cfg_.control_frequency, 1e-3);
   double d_heading_error = 0.0;
   if (prev_heading_error_valid_) {

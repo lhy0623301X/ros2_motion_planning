@@ -50,6 +50,16 @@ public:
     double theta{0.0};
   };
 
+  struct GoalSpeedLimitConfig
+  {
+    bool enabled{true};
+    double max_linear_velocity{0.6};
+    double max_decel{0.3};
+    double brake_distance_scale{1.5};
+    double brake_distance_buffer{0.2};
+    double min_linear_velocity{0.0};
+  };
+
   geometry_msgs::msg::PoseStamped transformPoseToPathFrame(
     const geometry_msgs::msg::PoseStamped & pose,
     const nav_msgs::msg::Path & path,
@@ -59,6 +69,11 @@ public:
     const nav_msgs::msg::Path & path,
     const geometry_msgs::msg::PoseStamped & robot_pose,
     double lookahead_dist) const;
+
+  double limitLinearSpeedByGoalDistance(
+    double desired_v,
+    double distance_to_goal,
+    const GoalSpeedLimitConfig & config) const;
 };
 
 }  // namespace rmp::controller

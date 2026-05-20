@@ -10,19 +10,27 @@ controller_server:
 
       heading_aligner:
         enable_start_alignment: true # 起步时是否先原地对齐预瞄点方向
-        enable_goal_alignment: true # 接近终点时是否原地对齐目标朝向
+        enable_goal_alignment: true # 终点角度对齐交给 Nav2 goal_checker / BT 处理
         control_frequency: 20.0 # 对齐模块控制频率 [Hz]
         start_alignment_max_distance: 2.0 # 机器人距离起步预瞄点超过该值后不再触发起步对齐 [m]
         start_lookahead_dist: 0.8 # 起步对齐使用的预瞄点距离 [m]
         start_yaw_threshold: 0.5 # 起步航向误差超过该值才进入对齐 [rad]
         start_yaw_tolerance: 0.08 # 起步对齐完成阈值 [rad]
-        goal_position_tolerance: 0.25 # 进入终点原地旋转的位置距离阈值 [m]
+        goal_position_tolerance: 0.2 # 进入终点原地旋转的位置距离阈值 [m]
         goal_yaw_tolerance: 0.25 # 终点朝向对齐完成阈值 [rad]
         angular_kp: 1.5 # 对齐角速度比例增益
         angular_kd: 0.05 # 航向误差微分增益，抑制对齐阶段转向振荡
         max_angular_velocity: 1.0 # 对齐最大角速度 [rad/s]
         min_angular_velocity: 0.0 # 对齐最小角速度 [rad/s]
         max_angular_velocity_increment: 0.2 # 单周期最大角速度增量 [rad/s]
+
+      goal_speed_limiter:
+        enabled: true # 接近终点时是否根据剩余距离限制线速度
+        max_linear_velocity: 0.8 # 用于计算开始减速距离的最大线速度 [m/s]
+        max_decel: 0.2 # 用于计算距离限速曲线的最大减速度 [m/s^2]
+        brake_distance_scale: 1.5 # 理论减速距离安全系数，越大越早减速
+        brake_distance_buffer: 0.2 # 理论刹车距离外的固定安全余量 [m]
+        min_linear_velocity: 0.0 # 限速结果低于该值时输出 0 [m/s]
 
       PID:
         control_frequency: 20.0 # 控制器内部计算频率 [Hz]
