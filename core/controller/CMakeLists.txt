@@ -21,17 +21,17 @@ find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
-  controller_algorithm.cpp
-  controller_factory.cpp
-  controller_node.cpp
-  pid_controller/pid_controller.cpp
-  utils/heading_aligner.cpp
-  utils/lookahead_point_publisher.cpp
+  src/controller_algorithm.cpp
+  src/controller_factory.cpp
+  src/controller_node.cpp
+  src/pid_controller/pid_controller.cpp
+  src/utils/heading_aligner.cpp
+  src/utils/lookahead_point_publisher.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
   PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
     ${EIGEN3_INCLUDE_DIR}
 )
@@ -63,16 +63,16 @@ install(
 
 install(
   FILES
-    controller_algorithm.h
-    controller_factory.h
-    controller_node.h
+    src/controller_algorithm.h
+    src/controller_factory.h
+    src/controller_node.h
   DESTINATION include/${PROJECT_NAME}
 )
 
 install(
   DIRECTORY
-    pid_controller
-    utils
+    src/pid_controller
+    src/utils
   DESTINATION include/${PROJECT_NAME}
   FILES_MATCHING PATTERN "*.h"
 )
