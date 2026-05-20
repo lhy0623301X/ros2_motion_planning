@@ -62,7 +62,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'controller_params_file',
-            default_value="/home/lhy/projects_files/ros2_motion_planning/src/sim_env/config/controller_params.yaml",
+            default_value="/home/lhy/projects_files/ros2_motion_planning/src/core/controller/config/controller_params.yaml",
         ),
 
         IncludeLaunchDescription(
