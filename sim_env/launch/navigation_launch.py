@@ -11,6 +11,7 @@ from nav2_common.launch import RewrittenYaml
 
 def generate_launch_description():
     sim_env_dir = get_package_share_directory('sim_env')
+    controller = get_package_share_directory('controller')
 
     map_name = LaunchConfiguration('map')
     params_file = LaunchConfiguration('params_file')
@@ -22,7 +23,7 @@ def generate_launch_description():
 
     default_params_file = os.path.join(sim_env_dir, 'config', 'nav2_params.yaml')
     default_controller_params_file = os.path.join(
-        sim_env_dir, 'config', 'controller_params.yaml'
+        controller, 'config', 'controller_params.yaml'
     )
 
     param_substitutions = {'use_sim_time': use_sim_time}
