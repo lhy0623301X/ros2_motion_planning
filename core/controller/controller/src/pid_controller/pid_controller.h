@@ -21,6 +21,7 @@
 #include "tf2_ros/buffer.h"
 
 #include "controller_algorithm.h"
+#include "utils/lookahead_point_publisher.h"
 
 namespace rmp::controller {
 
@@ -51,6 +52,11 @@ struct PIDControllerConfig
   double k_feedback{1.0};
   double dist_from_center_to_front_edge{0.3};
   bool model_based_mode{false};
+
+  double heading_slowdown_start{0.5};
+  double heading_slowdown_end{1.2};
+  double heading_stop_threshold{1.8};
+  double min_heading_slowdown_speed_ratio{0.25};
 };
 
 class PIDController : public ControllerAlgorithm
@@ -93,13 +99,12 @@ private:
     double lookahead_dist,
     const geometry_msgs::msg::PoseStamped & robot_pose) const;
 
-  Eigen::Vector2d modelFreePIDControl(
-    const Eigen::Vector3d & state,
-    const Eigen::Vector3d & desired,
-    const Eigen::Vector2d & current_velocity);
-  Eigen::Vector2d modelBasedPIDControl(
-    const Eigen::Vector3d & state,
-    const Eigen::Vector3d & desired) const;
+  Eigen::Vector2d dualChannelPIDControl(
+    const geometry_msgs::msg::PoseStamped & pose,
+    const TrackingPoint & target,
+    double current_yaw,
+    double current_v,
+    double current_w);
 
   double linearRegularization(double current, double desired) const;
   double angularRegularization(double current, double desired) const;
@@ -112,6 +117,7 @@ private:
   std::string controller_name_;
   std::shared_ptr<tf2_ros::Buffer> tf_;
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
+  std::unique_ptr<utils::LookaheadPointPublisher> lookahead_point_publisher_;
   nav_msgs::msg::Path global_plan_;
   PIDControllerConfig cfg_;
 

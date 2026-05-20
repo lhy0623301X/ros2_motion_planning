@@ -13,24 +13,29 @@ controller_server:
         goal_dist_tolerance: 0.25 # 到达目标的位置距离容差 [m]
         rotate_tolerance: 0.25 # 到达目标后的朝向容差 [rad]
 
-        max_linear_velocity: 0.50 # 最大线速度 [m/s]
+        max_linear_velocity: 0.60 # 最大线速度 [m/s]
         min_linear_velocity: 0.0 # 最小线速度 [m/s]，用于限制低速输出
-        max_linear_velocity_increment: 0.05 # 单周期最大线速度增量 [m/s]，限制加速突变
-        max_angular_velocity: 1.82 # 最大角速度 [rad/s]
+        max_linear_velocity_increment: 0.015 # 单周期最大线速度增量 [m/s]，限制加速突变
+        max_angular_velocity: 1.2 # 最大角速度 [rad/s]
         min_angular_velocity: 0.0 # 最小角速度 [rad/s]，用于限制低速输出
-        max_angular_velocity_increment: 0.10 # 单周期最大角速度增量 [rad/s]，限制转向突变
+        max_angular_velocity_increment: 0.2 # 单周期最大角速度增量 [rad/s]，限制转向突变
 
-        lookahead_time: 1.0 # 前视时间 [s]，通常速度越快前视距离越长
-        min_lookahead_dist: 0.30 # 最小前视距离 [m]
-        max_lookahead_dist: 0.90 # 最大前视距离 [m]
+        lookahead_time: 0.8 # 前视时间 [s]，通常速度越快前视距离越长
+        min_lookahead_dist: 0.3 # 最小前视距离 [m]
+        max_lookahead_dist: 1.0 # 最大前视距离 [m]
 
         p_linear_velocity: 1.0 # 线速度比例增益，越大响应越快但更容易振荡
         i_linear_velocity: 0.0 # 线速度积分增益，用于消除稳态误差
         d_linear_velocity: 0.0 # 线速度微分增益，用于抑制快速变化
-        p_angular_velocity: 2.0 # 角速度比例增益，越大转向越积极
-        i_angular_velocity: 0.0 # 角速度积分增益，用于消除角度稳态误差
-        d_angular_velocity: 0.0 # 角速度微分增益，用于抑制转向振荡
+        p_angular_velocity: 1.5 # 角速度比例增益，越大转向越积极
+        i_angular_velocity: 0.4 # 角速度积分增益，用于消除角度稳态误差
+        d_angular_velocity: 0.2 # 角速度微分增益，用于抑制转向振荡
 
-        k_feedback: 1.0 # 反馈项权重，用于增强横向/姿态误差修正
-        dist_from_center_to_front_edge: 0.30 # 机器人中心到前边缘距离 [m]，模型控制模式使用
-        model_based_mode: false # 是否启用模型控制模式，false 时使用普通 PID 跟踪
+        k_feedback: 2.0 # 保留参数，当前双通道 PID 不再使用
+        dist_from_center_to_front_edge: 0.20 # 保留参数，当前双通道 PID 不再使用
+        model_based_mode: false # 保留参数，当前 PID 固定使用纵向速度 + 横向航向双通道控制
+
+        heading_slowdown_start: 0.5 # 航向误差超过该值开始降低期望线速度 [rad]
+        heading_slowdown_end: 1.2 # 航向误差达到该值时降到最小速度比例 [rad]
+        heading_stop_threshold: 1.8 # 航向误差超过该值时线速度目标置 0，仅转向 [rad]
+        min_heading_slowdown_speed_ratio: 0.25 # 航向误差较大但未停车时的最小线速度比例

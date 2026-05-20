@@ -6,6 +6,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(common REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav2_core REQUIRED)
@@ -16,11 +17,13 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/controller_factory.cpp
   src/controller_node.cpp
   src/pid_controller/pid_controller.cpp
+  src/utils/lookahead_point_publisher.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -31,6 +34,7 @@ target_include_directories(${PROJECT_NAME}
 )
 
 ament_target_dependencies(${PROJECT_NAME}
+  common
   geometry_msgs
   nav2_core
   nav2_costmap_2d
@@ -40,6 +44,7 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp_lifecycle
   tf2
   tf2_ros
+  visualization_msgs
 )
 
 pluginlib_export_plugin_description_file(nav2_core controller_plugin.xml)
@@ -65,6 +70,7 @@ install(
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
+  common
   geometry_msgs
   nav2_core
   nav2_costmap_2d
@@ -74,6 +80,7 @@ ament_export_dependencies(
   rclcpp_lifecycle
   tf2
   tf2_ros
+  visualization_msgs
 )
 ament_export_libraries(${PROJECT_NAME})
 
