@@ -13,13 +13,14 @@ controller_server:
         enable_goal_alignment: true # 接近终点时是否原地对齐目标朝向
         control_frequency: 20.0 # 对齐模块控制频率 [Hz]
         start_alignment_max_distance: 2.0 # 机器人距离起步预瞄点超过该值后不再触发起步对齐 [m]
-        start_lookahead_dist: 0.5 # 起步对齐使用的预瞄点距离 [m]
+        start_lookahead_dist: 0.8 # 起步对齐使用的预瞄点距离 [m]
         start_yaw_threshold: 0.5 # 起步航向误差超过该值才进入对齐 [rad]
         start_yaw_tolerance: 0.08 # 起步对齐完成阈值 [rad]
         goal_position_tolerance: 0.25 # 进入终点原地旋转的位置距离阈值 [m]
         goal_yaw_tolerance: 0.25 # 终点朝向对齐完成阈值 [rad]
         angular_kp: 1.5 # 对齐角速度比例增益
-        max_angular_velocity: 1.2 # 对齐最大角速度 [rad/s]
+        angular_kd: 0.05 # 航向误差微分增益，抑制对齐阶段转向振荡
+        max_angular_velocity: 1.0 # 对齐最大角速度 [rad/s]
         min_angular_velocity: 0.0 # 对齐最小角速度 [rad/s]
         max_angular_velocity_increment: 0.2 # 单周期最大角速度增量 [rad/s]
 
@@ -28,7 +29,7 @@ controller_server:
         goal_dist_tolerance: 0.25 # 到达目标的位置距离容差 [m]
         rotate_tolerance: 0.25 # 到达目标后的朝向容差 [rad]
 
-        max_linear_velocity: 0.60 # 最大线速度 [m/s]
+        max_linear_velocity: 1.2 # 最大线速度 [m/s]
         min_linear_velocity: 0.0 # 最小线速度 [m/s]，用于限制低速输出
         max_linear_velocity_increment: 0.015 # 单周期最大线速度增量 [m/s]，限制加速突变
         max_angular_velocity: 1.2 # 最大角速度 [rad/s]

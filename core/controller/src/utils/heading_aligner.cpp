@@ -65,6 +65,8 @@ void HeadingAligner::configure(
     parameter_prefix + "goal_yaw_tolerance", cfg_.goal_yaw_tolerance);
   cfg_.angular_kp = node->declare_parameter<double>(
     parameter_prefix + "angular_kp", cfg_.angular_kp);
+  cfg_.angular_kd = node->declare_parameter<double>(
+    parameter_prefix + "angular_kd", cfg_.angular_kd);
   cfg_.max_angular_velocity = node->declare_parameter<double>(
     parameter_prefix + "max_angular_velocity", cfg_.max_angular_velocity);
   cfg_.min_angular_velocity = node->declare_parameter<double>(
@@ -82,6 +84,7 @@ void HeadingAligner::configure(
         << ", goal_position_tolerance=" << cfg_.goal_position_tolerance
         << ", goal_yaw_tolerance=" << cfg_.goal_yaw_tolerance
         << ", angular_kp=" << cfg_.angular_kp
+        << ", angular_kd=" << cfg_.angular_kd
         << ", max_w=" << cfg_.max_angular_velocity
         << ", dw_limit=" << cfg_.max_angular_velocity_increment;
 }
@@ -89,6 +92,7 @@ void HeadingAligner::configure(
 void HeadingAligner::reset()
 {
   start_alignment_done_ = false;
+  prev_heading_error_valid_ = false;
 }
 
 double HeadingAligner::startLookaheadDistance() const
@@ -140,7 +144,7 @@ std::optional<geometry_msgs::msg::Twist> HeadingAligner::computeStartAlignmentCo
 std::optional<geometry_msgs::msg::Twist> HeadingAligner::computeGoalAlignmentCommand(
   const geometry_msgs::msg::PoseStamped & robot_pose,
   const geometry_msgs::msg::PoseStamped & goal_pose,
-  const geometry_msgs::msg::Twist & velocity) const
+  const geometry_msgs::msg::Twist & velocity)
 {
   if (!cfg_.enable_goal_alignment) {
     return std::nullopt;
@@ -169,11 +173,19 @@ std::optional<geometry_msgs::msg::Twist> HeadingAligner::computeGoalAlignmentCom
 
 geometry_msgs::msg::Twist HeadingAligner::makeRotateCommand(
   double heading_error,
-  double current_w) const
+  double current_w)
 {
   geometry_msgs::msg::Twist cmd;
+  const double dt = 1.0 / std::max(cfg_.control_frequency, 1e-3);
+  double d_heading_error = 0.0;
+  if (prev_heading_error_valid_) {
+    d_heading_error = normalizeAngle(heading_error - prev_heading_error_) / dt;
+  }
+  prev_heading_error_ = heading_error;
+  prev_heading_error_valid_ = true;
+
   double desired_w = clamp(
-    cfg_.angular_kp * heading_error,
+    cfg_.angular_kp * heading_error + cfg_.angular_kd * d_heading_error,
     -cfg_.max_angular_velocity,
     cfg_.max_angular_velocity);
 

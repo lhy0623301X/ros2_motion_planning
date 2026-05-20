@@ -26,6 +26,7 @@ struct HeadingAlignerConfig
   double goal_position_tolerance{0.25};
   double goal_yaw_tolerance{0.25};
   double angular_kp{1.5};
+  double angular_kd{0.0};
   double max_angular_velocity{1.2};
   double min_angular_velocity{0.0};
   double max_angular_velocity_increment{0.2};
@@ -51,15 +52,17 @@ public:
   std::optional<geometry_msgs::msg::Twist> computeGoalAlignmentCommand(
     const geometry_msgs::msg::PoseStamped & robot_pose,
     const geometry_msgs::msg::PoseStamped & goal_pose,
-    const geometry_msgs::msg::Twist & velocity) const;
+    const geometry_msgs::msg::Twist & velocity);
 
 private:
   geometry_msgs::msg::Twist makeRotateCommand(
     double heading_error,
-    double current_w) const;
+    double current_w);
 
   HeadingAlignerConfig cfg_;
   bool start_alignment_done_{false};
+  double prev_heading_error_{0.0};
+  bool prev_heading_error_valid_{false};
 };
 
 }  // namespace rmp::controller::utils
