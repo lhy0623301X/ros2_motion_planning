@@ -16,6 +16,7 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
@@ -43,6 +44,7 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   rclcpp_lifecycle
   tf2
+  tf2_geometry_msgs
   tf2_ros
   visualization_msgs
 )
@@ -79,6 +81,7 @@ ament_export_dependencies(
   rclcpp
   rclcpp_lifecycle
   tf2
+  tf2_geometry_msgs
   tf2_ros
   visualization_msgs
 )

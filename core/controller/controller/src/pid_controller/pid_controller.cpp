@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "tf2/utils.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "util/log.h"
 
 namespace rmp::controller {
@@ -149,23 +150,25 @@ geometry_msgs::msg::TwistStamped PIDController::computeVelocityCommands(
     return cmd;
   }
 
+  const auto plan_frame_pose = transformPoseToPlanFrame(pose);
+
   const auto & goal_pose = global_plan_.poses.back();
-  if (goal_checker && goal_checker->isGoalReached(pose.pose, goal_pose.pose, velocity)) {
+  if (goal_checker && goal_checker->isGoalReached(plan_frame_pose.pose, goal_pose.pose, velocity)) {
     goal_reached_ = true;
     resetPidState();
     AINFO << "[PIDController] goal reached by Nav2 goal checker. pose=("
-          << pose.pose.position.x << ", " << pose.pose.position.y << ")";
+          << plan_frame_pose.pose.position.x << ", " << plan_frame_pose.pose.position.y << ")";
     return cmd;
   }
 
-  prunePlan(pose);
+  prunePlan(plan_frame_pose);
   const double dt = 1.0 / std::max(1.0, cfg_.control_frequency);
   const double current_v = velocity.linear.x;
   const double current_w = velocity.angular.z;
-  const double current_yaw = tf2::getYaw(pose.pose.orientation);
+  const double current_yaw = tf2::getYaw(plan_frame_pose.pose.orientation);
 
   // 如果已接近终点，原地旋转对准目标朝向
-  if (shouldRotateToGoal(pose)) {
+  if (shouldRotateToGoal(plan_frame_pose)) {
     const double heading_error = normalizeAngle(goalYaw() - current_yaw);
     if (!shouldRotateToPath(std::fabs(heading_error))) {
       goal_reached_ = true;
@@ -187,25 +190,28 @@ geometry_msgs::msg::TwistStamped PIDController::computeVelocityCommands(
     std::fabs(current_v) * cfg_.lookahead_time,
     cfg_.min_lookahead_dist,
     cfg_.max_lookahead_dist);
-  const TrackingPoint target = getLookAheadPoint(lookahead_dist, pose);
+  const TrackingPoint target = getLookAheadPoint(lookahead_dist, plan_frame_pose);
   if (lookahead_point_publisher_) {
-    const auto frame_id = pose.header.frame_id.empty() ? "map" : pose.header.frame_id;
+    const auto frame_id = global_plan_.header.frame_id.empty() ?
+      (plan_frame_pose.header.frame_id.empty() ? "map" : plan_frame_pose.header.frame_id) :
+      global_plan_.header.frame_id;
     lookahead_point_publisher_->publish(target.x, target.y, target.theta, frame_id, node_->now());
   }
 
   const Eigen::Vector2d control = dualChannelPIDControl(
-    pose, target, current_yaw, current_v, current_w);
+    plan_frame_pose, target, current_yaw, current_v, current_w);
 
   cmd.twist.linear.x = linearRegularization(current_v, control[0]);
   cmd.twist.angular.z = angularRegularization(current_w, control[1]);
   [[maybe_unused]] const double angular_accel = (cmd.twist.angular.z - current_w) *
     std::max(1.0, cfg_.control_frequency);
   const double target_heading = std::atan2(
-    target.y - pose.pose.position.y,
-    target.x - pose.pose.position.x);
+    target.y - plan_frame_pose.pose.position.y,
+    target.x - plan_frame_pose.pose.position.x);
   [[maybe_unused]] const double heading_error = normalizeAngle(target_heading - current_yaw);
   AINFO_EVERY(20) << "[PIDController] tracking: pose=("
-                  << pose.pose.position.x << ", " << pose.pose.position.y
+                  << plan_frame_pose.pose.position.x << ", " << plan_frame_pose.pose.position.y
+                  << ", frame=" << plan_frame_pose.header.frame_id
                   << ", lookahead_dist=" << lookahead_dist
                   << ", target=(" << target.x << ", " << target.y
                   << ", heading=" << target_heading << ")";
@@ -308,6 +314,25 @@ void PIDController::resetPidState()
   e_w_ = 0.0;
   i_v_ = 0.0;
   i_w_ = 0.0;
+}
+
+geometry_msgs::msg::PoseStamped PIDController::transformPoseToPlanFrame(
+  const geometry_msgs::msg::PoseStamped & pose) const
+{
+  const auto & plan_frame = global_plan_.header.frame_id;
+  if (plan_frame.empty() || pose.header.frame_id.empty() || pose.header.frame_id == plan_frame) {
+    return pose;
+  }
+
+  try {
+    return tf_->transform(pose, plan_frame, tf2::durationFromSec(0.1));
+  } catch (const tf2::TransformException & ex) {
+    AWARN << "[PIDController] failed to transform robot pose from "
+          << pose.header.frame_id << " to " << plan_frame
+          << ": " << ex.what()
+          << ". Falling back to the original pose; tracking may have frame error.";
+    return pose;
+  }
 }
 
 void PIDController::prunePlan(const geometry_msgs::msg::PoseStamped & robot_pose)

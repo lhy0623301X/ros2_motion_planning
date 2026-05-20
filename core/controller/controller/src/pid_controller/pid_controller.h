@@ -94,6 +94,8 @@ private:
 
   void readParameters();
   void resetPidState();
+  geometry_msgs::msg::PoseStamped transformPoseToPlanFrame(
+    const geometry_msgs::msg::PoseStamped & pose) const;
   void prunePlan(const geometry_msgs::msg::PoseStamped & robot_pose);
   TrackingPoint getLookAheadPoint(
     double lookahead_dist,
