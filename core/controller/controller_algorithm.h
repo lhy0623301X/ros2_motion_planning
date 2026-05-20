@@ -42,6 +42,23 @@ public:
     nav2_core::GoalChecker * goal_checker) = 0;
 
   virtual void setSpeedLimit(const double & speed_limit, const bool & percentage) = 0;
+
+  struct LookaheadPoint
+  {
+    double x{0.0};
+    double y{0.0};
+    double theta{0.0};
+  };
+
+  geometry_msgs::msg::PoseStamped transformPoseToPathFrame(
+    const geometry_msgs::msg::PoseStamped & pose,
+    const nav_msgs::msg::Path & path,
+    const std::shared_ptr<tf2_ros::Buffer> & tf) const;
+
+  LookaheadPoint selectLookaheadPoint(
+    const nav_msgs::msg::Path & path,
+    const geometry_msgs::msg::PoseStamped & robot_pose,
+    double lookahead_dist) const;
 };
 
 }  // namespace rmp::controller

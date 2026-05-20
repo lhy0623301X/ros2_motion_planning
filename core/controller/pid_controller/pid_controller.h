@@ -85,34 +85,19 @@ public:
   void setSpeedLimit(const double & speed_limit, const bool & percentage) override;
 
 private:
-  struct TrackingPoint
-  {
-    double x{0.0};
-    double y{0.0};
-    double theta{0.0};
-  };
-
   void readParameters();
   void resetPidState();
-  geometry_msgs::msg::PoseStamped transformPoseToPlanFrame(
-    const geometry_msgs::msg::PoseStamped & pose) const;
   void prunePlan(const geometry_msgs::msg::PoseStamped & robot_pose);
-  TrackingPoint getLookAheadPoint(
-    double lookahead_dist,
-    const geometry_msgs::msg::PoseStamped & robot_pose) const;
 
   Eigen::Vector2d dualChannelPIDControl(
     const geometry_msgs::msg::PoseStamped & pose,
-    const TrackingPoint & target,
+    const LookaheadPoint & target,
     double current_yaw,
     double current_v,
     double current_w);
 
   double linearRegularization(double current, double desired) const;
   double angularRegularization(double current, double desired) const;
-  bool shouldRotateToGoal(const geometry_msgs::msg::PoseStamped & pose) const;
-  bool shouldRotateToPath(double heading_error) const;
-  double goalYaw() const;
 
   rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
   std::string parameter_prefix_;

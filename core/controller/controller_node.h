@@ -10,6 +10,7 @@
 
 #include "controller_algorithm.h"
 #include "nav2_core/controller.hpp"
+#include "utils/heading_aligner.h"
 
 namespace rmp::controller {
 
@@ -41,7 +42,10 @@ private:
   rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
   std::string plugin_name_;
   std::string controller_name_;
+  std::shared_ptr<tf2_ros::Buffer> tf_;
   std::shared_ptr<ControllerAlgorithm> controller_;
+  nav_msgs::msg::Path global_plan_;
+  utils::HeadingAligner heading_aligner_;
 };
 
 }  // namespace rmp::controller

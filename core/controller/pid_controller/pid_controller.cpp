@@ -150,7 +150,7 @@ geometry_msgs::msg::TwistStamped PIDController::computeVelocityCommands(
     return cmd;
   }
 
-  const auto plan_frame_pose = transformPoseToPlanFrame(pose);
+  const auto plan_frame_pose = transformPoseToPathFrame(pose, global_plan_, tf_);
 
   const auto & goal_pose = global_plan_.poses.back();
   if (goal_checker && goal_checker->isGoalReached(plan_frame_pose.pose, goal_pose.pose, velocity)) {
@@ -162,27 +162,9 @@ geometry_msgs::msg::TwistStamped PIDController::computeVelocityCommands(
   }
 
   prunePlan(plan_frame_pose);
-  const double dt = 1.0 / std::max(1.0, cfg_.control_frequency);
   const double current_v = velocity.linear.x;
   const double current_w = velocity.angular.z;
   const double current_yaw = tf2::getYaw(plan_frame_pose.pose.orientation);
-
-  // 如果已接近终点，原地旋转对准目标朝向
-  if (shouldRotateToGoal(plan_frame_pose)) {
-    const double heading_error = normalizeAngle(goalYaw() - current_yaw);
-    if (!shouldRotateToPath(std::fabs(heading_error))) {
-      goal_reached_ = true;
-      resetPidState();
-      AINFO << "[PIDController] goal orientation reached: heading_error="
-            << heading_error << ", rotate_tolerance=" << cfg_.rotate_tolerance;
-      return cmd;
-    }
-    cmd.twist.angular.z = angularRegularization(current_w, heading_error / dt);
-    AINFO_EVERY(20) << "[PIDController] rotate-to-goal: heading_error="
-                    << heading_error << ", current_w=" << current_w
-                    << ", cmd_w=" << cmd.twist.angular.z;
-    return cmd;
-  }
 
   // 正常跟踪：计算预瞄点，执行 PID 控制
 
@@ -190,7 +172,7 @@ geometry_msgs::msg::TwistStamped PIDController::computeVelocityCommands(
     std::fabs(current_v) * cfg_.lookahead_time,
     cfg_.min_lookahead_dist,
     cfg_.max_lookahead_dist);
-  const TrackingPoint target = getLookAheadPoint(lookahead_dist, plan_frame_pose);
+  const auto target = selectLookaheadPoint(global_plan_, plan_frame_pose, lookahead_dist);
   if (lookahead_point_publisher_) {
     const auto frame_id = global_plan_.header.frame_id.empty() ?
       (plan_frame_pose.header.frame_id.empty() ? "map" : plan_frame_pose.header.frame_id) :
@@ -316,25 +298,6 @@ void PIDController::resetPidState()
   i_w_ = 0.0;
 }
 
-geometry_msgs::msg::PoseStamped PIDController::transformPoseToPlanFrame(
-  const geometry_msgs::msg::PoseStamped & pose) const
-{
-  const auto & plan_frame = global_plan_.header.frame_id;
-  if (plan_frame.empty() || pose.header.frame_id.empty() || pose.header.frame_id == plan_frame) {
-    return pose;
-  }
-
-  try {
-    return tf_->transform(pose, plan_frame, tf2::durationFromSec(0.1));
-  } catch (const tf2::TransformException & ex) {
-    AWARN << "[PIDController] failed to transform robot pose from "
-          << pose.header.frame_id << " to " << plan_frame
-          << ": " << ex.what()
-          << ". Falling back to the original pose; tracking may have frame error.";
-    return pose;
-  }
-}
-
 void PIDController::prunePlan(const geometry_msgs::msg::PoseStamped & robot_pose)
 {
   if (global_plan_.poses.size() < 2) {
@@ -373,49 +336,9 @@ void PIDController::prunePlan(const geometry_msgs::msg::PoseStamped & robot_pose
   }
 }
 
-PIDController::TrackingPoint PIDController::getLookAheadPoint(
-  double lookahead_dist,
-  const geometry_msgs::msg::PoseStamped & robot_pose) const
-{
-  const double rx = robot_pose.pose.position.x;
-  const double ry = robot_pose.pose.position.y;
-
-  // 沿路径查找第一个距离机器人 >= lookahead_dist 的点作为预瞄点
-  auto target_it = std::find_if(
-    global_plan_.poses.begin(), global_plan_.poses.end(),
-    [&](const auto & plan_pose) {
-      return std::hypot(plan_pose.pose.position.x - rx, plan_pose.pose.position.y - ry) >=
-             lookahead_dist;
-    });
-
-  // 路径太短时退化为瞄准终点
-  if (target_it == global_plan_.poses.end()) {
-    target_it = std::prev(global_plan_.poses.end());
-  }
-
-  TrackingPoint target;
-  target.x = target_it->pose.position.x;
-  target.y = target_it->pose.position.y;
-
-  // 预瞄方向取目标点指向下一个路径点的方向，保证前瞻性；
-  // 若已是最后一个点，则用本身的 yaw 或机器人到目标的方向作为 fallback。
-  if (target_it + 1 != global_plan_.poses.end()) {
-    const auto & next = *(target_it + 1);
-    target.theta = std::atan2(
-      next.pose.position.y - target.y,
-      next.pose.position.x - target.x);
-  } else {
-    target.theta = tf2::getYaw(target_it->pose.orientation);
-    if (!std::isfinite(target.theta)) {
-      target.theta = std::atan2(target.y - ry, target.x - rx);
-    }
-  }
-  return target;
-}
-
 Eigen::Vector2d PIDController::dualChannelPIDControl(
   const geometry_msgs::msg::PoseStamped & pose,
-  const TrackingPoint & target,
+  const LookaheadPoint & target,
   double current_yaw,
   double current_v,
   double current_w)
@@ -543,21 +466,6 @@ double PIDController::angularRegularization(double current, double desired) cons
     return 0.0;
   }
   return cmd;
-}
-
-bool PIDController::shouldRotateToGoal(const geometry_msgs::msg::PoseStamped & pose) const
-{
-  return planarDistance(pose, global_plan_.poses.back()) < cfg_.goal_dist_tolerance;
-}
-
-bool PIDController::shouldRotateToPath(double heading_error) const
-{
-  return heading_error > cfg_.rotate_tolerance;
-}
-
-double PIDController::goalYaw() const
-{
-  return tf2::getYaw(global_plan_.poses.back().pose.orientation);
 }
 
 }  // namespace rmp::controller

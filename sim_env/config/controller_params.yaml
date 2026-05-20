@@ -8,6 +8,21 @@ controller_server:
     FollowPath:
       controller_name: "PID" # 当前自研控制算法名称，由 controller/Controller 内部工厂创建
 
+      heading_aligner:
+        enable_start_alignment: true # 起步时是否先原地对齐预瞄点方向
+        enable_goal_alignment: true # 接近终点时是否原地对齐目标朝向
+        control_frequency: 20.0 # 对齐模块控制频率 [Hz]
+        start_alignment_max_distance: 2.0 # 机器人距离起步预瞄点超过该值后不再触发起步对齐 [m]
+        start_lookahead_dist: 0.5 # 起步对齐使用的预瞄点距离 [m]
+        start_yaw_threshold: 0.5 # 起步航向误差超过该值才进入对齐 [rad]
+        start_yaw_tolerance: 0.08 # 起步对齐完成阈值 [rad]
+        goal_position_tolerance: 0.25 # 进入终点原地旋转的位置距离阈值 [m]
+        goal_yaw_tolerance: 0.25 # 终点朝向对齐完成阈值 [rad]
+        angular_kp: 1.5 # 对齐角速度比例增益
+        max_angular_velocity: 1.2 # 对齐最大角速度 [rad/s]
+        min_angular_velocity: 0.0 # 对齐最小角速度 [rad/s]
+        max_angular_velocity_increment: 0.2 # 单周期最大角速度增量 [rad/s]
+
       PID:
         control_frequency: 20.0 # 控制器内部计算频率 [Hz]
         goal_dist_tolerance: 0.25 # 到达目标的位置距离容差 [m]
@@ -20,9 +35,9 @@ controller_server:
         min_angular_velocity: 0.0 # 最小角速度 [rad/s]，用于限制低速输出
         max_angular_velocity_increment: 0.2 # 单周期最大角速度增量 [rad/s]，限制转向突变
 
-        lookahead_time: 0.8 # 前视时间 [s]，通常速度越快前视距离越长
-        min_lookahead_dist: 0.3 # 最小前视距离 [m]
-        max_lookahead_dist: 1.0 # 最大前视距离 [m]
+        lookahead_time: 1.0 # 前视时间 [s]，通常速度越快前视距离越长
+        min_lookahead_dist: 0.5 # 最小前视距离 [m]
+        max_lookahead_dist: 1.5 # 最大前视距离 [m]
 
         p_linear_velocity: 1.0 # 线速度比例增益，越大响应越快但更容易振荡
         i_linear_velocity: 0.0 # 线速度积分增益，用于消除稳态误差

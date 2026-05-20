@@ -9,6 +9,7 @@
 
 #include "controller_factory.h"
 #include "pluginlib/class_list_macros.hpp"
+#include "util/log.h"
 
 namespace rmp::controller {
 
@@ -24,8 +25,10 @@ void ControllerNode::configure(
   }
 
   plugin_name_ = std::move(name);
+  tf_ = std::move(tf);
   controller_name_ = node_->declare_parameter<std::string>(
     plugin_name_ + ".controller_name", "PID");
+  heading_aligner_.configure(node_, plugin_name_ + ".heading_aligner.");
   controller_ = ControllerFactory::create(controller_name_);
 
   if (!controller_) {
@@ -33,7 +36,7 @@ void ControllerNode::configure(
   }
 
   controller_->configure(
-    node_, plugin_name_, controller_name_, std::move(tf), std::move(costmap_ros));
+    node_, plugin_name_, controller_name_, tf_, std::move(costmap_ros));
 
   RCLCPP_INFO(
     node_->get_logger(),
@@ -43,6 +46,8 @@ void ControllerNode::configure(
 
 void ControllerNode::cleanup()
 {
+  global_plan_.poses.clear();
+  heading_aligner_.reset();
   if (controller_) {
     controller_->cleanup();
   }
@@ -64,6 +69,8 @@ void ControllerNode::deactivate()
 
 void ControllerNode::setPlan(const nav_msgs::msg::Path & path)
 {
+  global_plan_ = path;
+  heading_aligner_.reset();
   if (controller_) {
     controller_->setPlan(path);
   }
@@ -77,7 +84,40 @@ geometry_msgs::msg::TwistStamped ControllerNode::computeVelocityCommands(
   if (!controller_) {
     throw std::runtime_error("ControllerNode is not configured with an internal controller");
   }
-  return controller_->computeVelocityCommands(pose, velocity, goal_checker);
+
+  if (global_plan_.poses.empty()) {
+    return controller_->computeVelocityCommands(pose, velocity, goal_checker);
+  }
+
+  geometry_msgs::msg::TwistStamped cmd;
+  cmd.header.stamp = node_->now();
+  const auto plan_frame_pose = controller_->transformPoseToPathFrame(pose, global_plan_, tf_);
+  cmd.header.frame_id = plan_frame_pose.header.frame_id;
+
+  const auto & goal_pose = global_plan_.poses.back();
+  if (goal_checker && goal_checker->isGoalReached(plan_frame_pose.pose, goal_pose.pose, velocity)) {
+    AINFO_EVERY(20) << "[ControllerNode] goal reached by Nav2 goal checker.";
+    return cmd;
+  }
+
+  if (auto goal_align_cmd =
+      heading_aligner_.computeGoalAlignmentCommand(plan_frame_pose, goal_pose, velocity))
+  {
+    cmd.twist = *goal_align_cmd;
+    return cmd;
+  }
+
+  const auto lookahead = controller_->selectLookaheadPoint(
+    global_plan_, plan_frame_pose, heading_aligner_.startLookaheadDistance());
+  if (auto start_align_cmd =
+      heading_aligner_.computeStartAlignmentCommand(
+        plan_frame_pose, lookahead.x, lookahead.y, velocity))
+  {
+    cmd.twist = *start_align_cmd;
+    return cmd;
+  }
+
+  return controller_->computeVelocityCommands(plan_frame_pose, velocity, goal_checker);
 }
 
 void ControllerNode::setSpeedLimit(const double & speed_limit, const bool & percentage)
