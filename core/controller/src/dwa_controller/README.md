@@ -1,332 +1,478 @@
-## DWA Controller Design
+# DWA Controller
 
-这份文档定义当前 ROS2 工程中自研 DWA 控制器的**合理文件划分**。
+本文档说明当前 ROS2 工程中 DWA 控制器的算法流程和轨迹评价体系。
 
-目标不是把所有逻辑塞进一个文件，也不是为了“优雅”拆出很多碎模块，而是保持：
+DWA 的核心思想是：每个控制周期不直接跟踪某一个路径点，而是在当前速度附近采样一批候选控制量 `(v, w)`，把每个控制量前向仿真成一条短时轨迹，然后用多项代价函数评价这些轨迹，选择总代价最低的轨迹作为本周期输出。
 
-- 算法主线清晰
-- 文件数量适中
-- 与当前 `ControllerAlgorithm` 架构兼容
-- 后续实现和调试成本可控
+当前实现面向差速底盘，只采样前向线速度 `v` 和角速度 `w`，不采样横向速度 `vy`。
 
-## 设计原则
+## 每周期流程
 
-- DWA 的主流程要围绕算法本身组织，而不是围绕过度抽象拆文件
-- “采样速度”和“前向生成轨迹”属于一个连续逻辑单元，应放在同一个模块
-- 参数直接通过 `DWAControllerConfig` 从 YAML 读取，不单独拆 `dwa_config`
-- 不单独做 `debug_publisher`
-- 不引入复杂 critic 类继承体系，优先使用简单直接的函数式结构
+`DWAController::computeVelocityCommands()` 每次被 Nav2 controller server 调用时，大致执行以下步骤：
 
-## 参考算法主线
+1. 裁剪全局路径
 
-当前建议围绕下面这条 DWA 主线实现：
+   `prunePlan()` 会删除机器人已经走过的路径点，让后续评分只关注机器人前方的局部路径。
 
-- `prune_plan()`
-- `motion_model()`
-- `calc_dynamic_window()`
-- `predict_trajectory()`
-- `check_collision()`
-- `evaluate_trajectory()`
-- `plan()`
+2. 构造当前状态
 
-这条主线已经足够描述一个完整的 DWA 控制器。
+   根据当前机器人位姿和速度构造 `DWAState`：
 
-## 推荐文件划分
+   ```text
+   x, y, theta, v, w
+   ```
 
-当前最合理的是 **4 个文件**，必要时可以扩展到 **5 个文件**，但不建议更多。
+3. 计算动态窗口
 
-### 1. `dwa_controller.h`
+   `calcDynamicWindow()` 根据当前速度和单周期速度增量限制，得到本周期可采样的速度范围：
 
-职责：
+   ```text
+   v  in [current_v - max_linear_velocity_increment,
+          current_v + max_linear_velocity_increment]
 
-- 声明 `DWAController` 类
-- 声明 `DWAControllerConfig`
-- 声明 DWA 共享轻量数据结构
+   w  in [current_w - max_angular_velocity_increment,
+          current_w + max_angular_velocity_increment]
+   ```
 
-建议内容：
+   这个窗口表示机器人在一个控制周期内物理上来得及达到的速度集合。
 
-- `struct DWAControllerConfig`
-- `struct DWAState`
-- `struct DynamicWindow`
-- `struct DWATrajectoryPoint`
-- `struct DWATrajectory`
-- `class DWAController : public ControllerAlgorithm`
+4. 采样并生成轨迹
 
-说明：
+   `generateTrajectorySamples()` 在动态窗口中离散采样 `vx_samples * vtheta_samples` 个 `(v, w)`，并对每个样本调用 `predictTrajectory()`。
 
-- `DWAControllerConfig` 直接放这里最合理
-- `DWAState / DynamicWindow / DWATrajectory` 这些也是 DWA 本体紧耦合结构，没必要单拆 `types.h`
+   `predictTrajectory()` 假设机器人在 `sim_time` 时间内持续执行同一个 `(v, w)`，按 `sim_time_step` 积分得到预测轨迹。
 
-### 2. `dwa_controller.cpp`
+5. 评价每条轨迹
 
-职责：
+   `evaluateTrajectory()` 先做硬碰撞检查。如果轨迹撞到致命障碍，直接返回 `infinity`，该轨迹不会被选中。
 
-- DWA 顶层控制流程
-- 参数读取
-- `setPlan()`
-- `computeVelocityCommands()`
-- `plan()`
-- 最终速度正则化
+   如果轨迹合法，再计算各项软代价，并按权重加权求和。
 
-建议保留这些主函数：
+6. 选择最优轨迹
 
-- `readParameters()`
-- `prunePlan(...)`
-- `computeVelocityCommands(...)`
-- `plan(...)`
-- `linearRegularization(...)`
-- `angularRegularization(...)`
+   DWA 选择总代价最低的合法轨迹。当前实现中总代价越小越好。
 
-说明：
+7. 输出速度
 
-- 这个文件负责“总控”
-- 它应该让人一眼看到 DWA 每个周期是怎么跑的
-- 但不应堆太多细节计算
+   最优轨迹对应的 `(v, w)` 经过 `linearRegularization()` 和 `angularRegularization()` 做最终速度保护后，输出给底盘。
 
-### 3. `dwa_motion.h`
+8. 发布可视化
 
-职责：
+   `DWAVisualizer` 会发布当前周期所有采样轨迹和最优轨迹：
 
-- 与“轨迹生成”直接相关的声明
-- 包括动态窗口计算、运动模型、前向轨迹展开
+   ```text
+   灰色线：所有采样轨迹
+   红色线：最终选中的最优轨迹
+   ```
 
-建议内容：
+## 轨迹评价总公式
 
-- `DWAState motionModel(...)`
-- `DynamicWindow calcDynamicWindow(...)`
-- `DWATrajectory predictTrajectory(...)`
-- `std::vector<DWATrajectory> generateTrajectorySamples(...)`
+当前每条轨迹的评分逻辑是：
 
-说明：
+```text
+if collision:
+  score = infinity
+else:
+  score =
+    path_distance_bias     * path_score
+  + goal_distance_bias     * goal_score
+  + obstacle_distance_bias * obstacle_score
+  + alignment_bias         * alignment_score
+  + goal_front_bias        * goal_front_score
+  + velocity_bias          * velocity_score
+  + twirling_bias          * twirling_score
+  + oscillation_penalty
+```
 
-- **采样与轨迹生成放在一起**
-- 这是你刚刚指出的关键点，也是这份设计里最重要的收口
-- DWA 中“采一个 `(v, w)`”和“立刻把它滚成一条轨迹”本来就是一个模块
+其中 `oscillation_penalty` 在 `DWAController::plan()` 中额外加入，用于使用控制器内部保存的历史运动方向。
 
-### 4. `dwa_motion.cpp`
+所有软代价都是“越小越好”。权重越大，该项对最终选择影响越强。
 
-职责：
+## 硬碰撞检查
 
-- 实现 `motion_model`
-- 实现 `calc_dynamic_window`
-- 实现 `predict_trajectory`
-- 实现候选命令采样与轨迹生成
+硬碰撞检查由 `checkCollision()` 完成。
 
-建议内部逻辑：
+它会检查整条预测轨迹的 footprint 是否碰到致命障碍：
 
-1. 根据当前状态和速度限制计算 dynamic window
-2. 在 dynamic window 中离散采样 `v / w`
-3. 对每个样本调用 `motionModel()` 反复积分
-4. 生成一条短时轨迹
-5. 返回全部候选轨迹
+```text
+cost >= LETHAL_OBSTACLE
+```
 
-### 5. `dwa_critic.h`
+如果碰到致命障碍，轨迹直接非法，不再进入评分。
 
-职责：
+注意：当前实现不会把 `INSCRIBED_INFLATED_OBSTACLE` 直接作为硬碰撞。膨胀区会进入 `obstacle_score` 做软惩罚。这样 DWA 仍然有空间选择靠近障碍但不真正碰撞的绕障轨迹。
 
-- 声明轨迹评价相关函数
+### footprint collision
 
-建议内容：
+当前碰撞检查不再只看机器人中心点，而是使用 Nav2 当前 footprint。
 
-- `bool checkCollision(...)`
-- `double scorePath(...)`
-- `double scoreGoal(...)`
-- `double evaluateTrajectory(...)`
+检查过程：
 
-说明：
+1. 读取 `costmap_ros->getRobotFootprint()`。
+2. 对每个轨迹点，把 footprint 按轨迹点的 `x, y, theta` 变换到世界坐标。
+3. 沿 footprint 多边形边界采样 costmap 代价。
+4. 如果任意边界点进入致命障碍，轨迹非法。
 
-- 这里不建议拆成很多 critic 类
-- 第一版直接保留函数式接口最合适
+如果没有配置 footprint，则退化为 `robot_radius` 构造的圆形近似 footprint。
 
-### 6. `dwa_critic.cpp`
+### footprint scaling
 
-职责：
+速度越高，机器人需要越保守的安全余量。当前实现会根据轨迹线速度放大 footprint：
 
-- 实现碰撞检测
-- 实现路径代价
-- 实现目标推进代价
-- 实现总代价组合
+```text
+if abs(v) <= footprint_scaling_speed:
+  scale = 1.0
+else:
+  scale = 1.0 + ratio * max_footprint_scaling_factor
+```
 
-建议第一版只保留三项：
+其中 `ratio` 根据当前速度在 `[footprint_scaling_speed, max_linear_velocity]` 之间的位置线性计算。
 
-- `collision`
-- `path`
-- `goal`
+这意味着高速轨迹会用更大的 footprint 检查碰撞，低速轨迹则使用原始 footprint。
 
-以后如果确实需要，再加：
+### stop_time_buffer
 
-- `alignment`
-- `oscillation`
-- `twirling`
+`stop_time_buffer` 用于检查轨迹末端是否预留了刹停空间。
 
-## 文件之间的关系
+当前实现会根据速度增量和控制频率估算减速度：
 
-建议关系如下：
+```text
+linear_deceleration  = max_linear_velocity_increment  * control_frequency
+angular_deceleration = max_angular_velocity_increment * control_frequency
+```
 
-- `dwa_controller.cpp`
-  - 调 `prunePlan(...)`
-  - 调 `plan(...)`
+再估算当前轨迹命令从 `(v, w)` 刹停需要的时间：
 
-- `plan(...)`
-  - 调 `calcDynamicWindow(...)`
-  - 调 `generateTrajectorySamples(...)`
-  - 遍历每条轨迹，调 `evaluateTrajectory(...)`
-  - 选出最佳轨迹
+```text
+stop_time = max(abs(v) / linear_deceleration,
+                abs(w) / angular_deceleration)
+          + stop_time_buffer
+```
 
-- `evaluateTrajectory(...)`
-  - 先调 `checkCollision(...)`
-  - 再调 `scorePath(...)`
-  - 再调 `scoreGoal(...)`
-  - 汇总最终分数
+如果轨迹本身结束后，在这段额外安全时间内继续按当前速度推进会撞上致命障碍，该轨迹也会被判非法。
 
-这样职责边界会很清楚：
+这项的作用是避免 DWA 选择“短时不撞、但已经没有刹车空间”的危险轨迹。
 
-- `dwa_controller.*`：控制主线
-- `dwa_motion.*`：采样 + 轨迹生成
-- `dwa_critic.*`：轨迹评价
+## 软代价项
 
-## 为什么这样比“全放一个文件”更合理
+### 1. obstacle_score
 
-因为 DWA 至少天然有两大块明显不同的逻辑：
+`obstacle_score` 衡量轨迹经过区域的障碍代价。
 
-1. **生成候选轨迹**
-2. **评价候选轨迹**
+计算方式：
 
-如果把这两部分全堆在一个 cpp 里，后面代码会很快失控：
+1. 对轨迹点和额外刹停检查点进行 footprint cost 检查。
+2. 取整条轨迹上的最大 costmap 代价。
+3. 用 `INSCRIBED_INFLATED_OBSTACLE` 做归一化：
 
-- 速度窗口逻辑
-- 仿真积分逻辑
-- costmap 碰撞逻辑
-- 路径距离代价
-- 目标推进代价
+   ```text
+   obstacle_score = max_cost / INSCRIBED_INFLATED_OBSTACLE
+   ```
 
-都会混在一起，不利于调试。
+含义：
 
-但如果拆得太碎，又会把一个很直白的算法拆成很多跳转层。
+- 越靠近障碍，分数越大。
+- 真正致命障碍会在硬碰撞阶段被淘汰。
+- 膨胀区不会直接淘汰，但会让轨迹变贵。
 
-所以当前这个 4~6 文件结构是比较平衡的。
+对应权重：
 
-## 当前不建议拆出的文件
+```yaml
+obstacle_distance_bias
+```
 
-以下内容当前都不建议单独拆：
+如果机器人绕障不够积极，可以适当增大该权重。  
+如果机器人过于保守、靠近障碍就停，可以适当减小该权重，或者减小 footprint scaling。
 
-- `dwa_config.h`
-- `dwa_types.h`
-- `dynamic_window.h`
-- `trajectory_generator.h`
-- `trajectory_scorer.h`
-- `debug_publisher.h`
-- `base_critic.h`
-- `obstacle_critic.h`
-- `goal_critic.h`
-- `path_critic.h`
+### 2. path_score
 
-原因：
+`path_score` 衡量轨迹终点离当前全局路径有多远。
 
-- 这些命名虽然“看起来专业”，但会把当前实现拆得过碎
-- 对你这个项目现阶段来说，阅读和调试成本会明显高于收益
+这里的“当前全局路径”指的是 Nav2 传给控制器、并经过 `prunePlan()` 裁剪后的 `global_plan_`。它来源于全局规划器，不是 DWA 自己生成的局部路径。
 
-## 第一版最小实现建议
+计算方式：
 
-第一版建议先支持：
+```text
+path_score = min_distance(trajectory_end, path_poses)
+```
 
-- 差速底盘
-- `(v, w)` 二维采样
-- 固定时域前向仿真
-- 基础 costmap 碰撞检测
-- 路径贴合代价
-- 目标推进代价
+含义：
 
-不建议第一版就做：
+- 越贴近全局路径，分数越小。
+- 偏离路径绕障会让该分数变大。
 
-- `vy` 采样
-- footprint 动态缩放
-- 点云调试可视化
-- 复杂 oscillation 状态机
-- stop-rotate 内嵌到 DWA 内部
+对应权重：
 
-这些都可以在第二阶段再加。
+```yaml
+path_distance_bias
+```
 
-## 与当前项目架构的关系
+这项太大时，DWA 会过度贴全局路径，遇到路径上的障碍时不愿意绕开。  
+这项太小时，机器人可能绕得太散，不容易回到全局路径。
 
-外层仍然保持不变：
+### 3. goal_score
 
-- `ControllerNode`
-  - start alignment
-  - goal alignment
-  - outer speed limit chain
+`goal_score` 衡量轨迹终点离当前局部目标有多远。
 
-`DWAController` 只负责：
+当前局部目标使用裁剪后的路径末端：
 
-- 基于当前局部状态，从候选轨迹中选最优控制命令
+```text
+goal_score = distance(trajectory_end, path.back())
+```
 
-这样不会和你现有的：
+含义：
 
-- `heading_aligner`
-- `goal_speed_limiter`
-- `curvature_speed_limiter`
+- 越朝路径终点推进，分数越小。
+- 这项鼓励机器人整体向目标前进，而不是只贴着路径局部摆动。
 
-发生职责冲突。
+对应权重：
 
-## 推荐实现顺序
+```yaml
+goal_distance_bias
+```
 
-### Phase 1
+### 4. alignment_score
 
-- `dwa_controller.h`
-- `dwa_controller.cpp`
-- `dwa_motion.h`
-- `dwa_motion.cpp`
+`alignment_score` 用来约束车头方向，让机器人前方的“鼻子点”贴近路径。
 
-先把：
+鼻子点定义为：
 
-- 参数读取
-- dynamic window
-- 采样
-- 前向仿真
+```text
+nose = trajectory_end + forward_point_distance * heading_vector
+```
 
-跑通
+计算方式：
 
-### Phase 2
+```text
+alignment_score =
+  distance(nose, nearest_path_pose)
+  + 0.25 * abs(angle_diff(trajectory_end_theta, path_yaw))
+```
 
-- `dwa_critic.h`
-- `dwa_critic.cpp`
+含义：
 
-补：
+- 只看机器人中心贴路径，可能出现车身方向乱摆。
+- 加入鼻子点后，DWA 会更倾向选择车头顺着路径趋势的轨迹。
+- 接近目标时，这项会自动关闭，避免和终点姿态调整冲突。
 
-- 碰撞检测
-- 路径评分
-- 目标评分
+接近目标关闭条件：
 
-### Phase 3
+```text
+distance(trajectory_end, path.back())
+  <= forward_point_distance * sqrt(alignment_goal_distance_scale)
+```
 
-增强项按需增加：
+对应参数：
 
-- alignment cost
-- oscillation control
-- footprint scaling
-- 轨迹可视化
+```yaml
+alignment_bias
+forward_point_distance
+alignment_goal_distance_scale
+```
 
-## 最终结论
+如果机器人遇障后不愿意偏离全局路径，可以适当降低 `alignment_bias`。  
+如果机器人车头摆动明显，可以适当提高 `alignment_bias`。
 
-当前针对你这个项目，最合理的 DWA 文件结构不是：
+### 5. goal_front_score
 
-- 全塞一个 cpp
+`goal_front_score` 让机器人前鼻子朝局部目标推进。
 
-也不是：
+它不是比较机器人中心和目标，而是比较前鼻子点和“前移后的目标点”：
 
-- 十几个抽象小文件
+```text
+shifted_goal = goal + forward_point_distance * direction(robot_start -> goal)
+goal_front_score = distance(nose, shifted_goal)
+```
 
-而是控制在：
+含义：
 
-- `dwa_controller.h`
-- `dwa_controller.cpp`
-- `dwa_motion.h`
-- `dwa_motion.cpp`
-- `dwa_critic.h`
-- `dwa_critic.cpp`
+- 鼓励车头朝目标方向走。
+- 减少差速车低速原地找角度和蛇形修正。
+- 和 `alignment_score` 不同，它更关注“朝目标推进”，而不是“贴路径趋势”。
 
-其中最关键的约束是：
+对应参数：
 
-- **采样与轨迹生成必须放在同一个模块**
+```yaml
+goal_front_bias
+forward_point_distance
+```
 
-这最符合 DWA 算法本身的逻辑。*** End Patch
+如果机器人在障碍附近总是原地调角，可以适当降低该权重。  
+如果机器人朝目标推进不明显，可以适当提高该权重。
+
+### 6. velocity_score
+
+`velocity_score` 鼓励更大的前向速度。
+
+计算方式：
+
+```text
+velocity_score = 1.0 - clamp(v / max_linear_velocity, 0.0, 1.0)
+```
+
+含义：
+
+- 速度越大，分数越小。
+- 速度越接近 0，分数越大。
+- 这项用于避免 DWA 长期选择低速轨迹或原地转。
+
+对应参数：
+
+```yaml
+velocity_bias
+```
+
+这项太大时，机器人可能过于想前进，绕障时不够谨慎。  
+这项太小时，机器人容易选择低速或停转。
+
+### 7. twirling_score
+
+`twirling_score` 惩罚过大的角速度。
+
+计算方式：
+
+```text
+twirling_score = abs(w) / max_angular_velocity
+```
+
+含义：
+
+- 角速度越大，分数越大。
+- 用于抑制无必要的原地旋转和大幅摆头。
+
+对应参数：
+
+```yaml
+twirling_bias
+```
+
+这项太大时，机器人可能不愿意转弯。  
+这项太小时，机器人可能频繁原地转或走出很急的弧线。
+
+### 8. oscillation_penalty
+
+`oscillation_penalty` 抑制短时间内角速度方向反复切换。
+
+这项不在 `evaluateTrajectory()` 内部，因为它需要记忆上一周期的运动方向。当前由 `DWAController` 保存状态：
+
+```text
+last_angular_sign
+oscillation_reset_pose
+```
+
+逻辑：
+
+1. 如果上一次明显向左转，本周期明显向右转，则加罚。
+2. 如果上一次明显向右转，本周期明显向左转，则加罚。
+3. 如果角速度绝对值小于 `oscillation_min_angular_velocity`，不记录方向。
+4. 如果机器人已经移动超过 `oscillation_reset_dist`，或转过超过 `oscillation_reset_angle`，清除振荡状态。
+
+对应参数：
+
+```yaml
+oscillation_bias
+oscillation_reset_dist
+oscillation_reset_angle
+oscillation_min_angular_velocity
+```
+
+这项太大时，机器人可能在需要反向修正时不够灵活。  
+这项太小时，机器人可能左右来回抖。
+
+## 参数含义
+
+### 速度边界
+
+```yaml
+max_linear_velocity
+min_linear_velocity
+max_linear_velocity_increment
+max_angular_velocity
+min_angular_velocity
+max_angular_velocity_increment
+```
+
+`max_*_velocity` 是速度绝对上限。  
+`max_*_velocity_increment` 是单周期速度变化上限，直接决定动态窗口大小。
+
+如果 `max_linear_velocity_increment` 太小，DWA 起步会很慢。  
+如果 `max_angular_velocity_increment` 太小，DWA 转向响应会慢。
+
+### 轨迹预测
+
+```yaml
+sim_time
+sim_time_step
+vx_samples
+vtheta_samples
+```
+
+`sim_time` 越长，DWA 看得越远，但计算量更大，也更容易因为远端障碍而保守。  
+`sim_time_step` 越小，轨迹检查越密，但计算量更大。  
+`vx_samples` 和 `vtheta_samples` 越大，候选轨迹越丰富，但计算量越大。
+
+### 前鼻子点
+
+```yaml
+forward_point_distance
+```
+
+这个点用于 `alignment_score` 和 `goal_front_score`。
+
+值越大，越强调车头方向。  
+值太大时，可能导致机器人绕障时过于拘泥于车头对齐。
+
+### footprint 与安全距离
+
+```yaml
+robot_radius
+footprint_scaling_speed
+max_footprint_scaling_factor
+stop_time_buffer
+```
+
+如果 Nav2 提供了 footprint，则优先使用 Nav2 footprint。  
+如果没有 footprint，则用 `robot_radius` 生成圆形近似。
+
+`footprint_scaling_speed` 和 `max_footprint_scaling_factor` 控制高速保守程度。  
+`stop_time_buffer` 控制额外刹停安全检查时间。
+
+## 调参建议
+
+如果机器人遇障停下、不愿意绕：
+
+- 降低 `path_distance_bias`
+- 降低 `alignment_bias`
+- 降低 `goal_front_bias`
+- 降低 `max_footprint_scaling_factor`
+- 适当提高 `obstacle_distance_bias`，让远离障碍的轨迹更有优势
+
+如果机器人离路径太远：
+
+- 提高 `path_distance_bias`
+- 提高 `alignment_bias`
+
+如果机器人原地转：
+
+- 提高 `velocity_bias`
+- 提高 `twirling_bias`
+- 提高 `oscillation_bias`
+- 检查是否有大量前进轨迹被硬碰撞判非法
+
+如果机器人太贴障碍：
+
+- 提高 `obstacle_distance_bias`
+- 提高 `max_footprint_scaling_factor`
+- 提高 `stop_time_buffer`
+
+## 当前实现边界
+
+当前 DWA 已经包含基本局部绕障能力，但仍是轻量实现：
+
+- `path_score` 仍是几何距离，不是原 ROS1 DWA 的 MapGrid 波前传播代价。
+- `goal_score` 也是几何距离，不是 costmap 上的 goal wavefront。
+- footprint 检查使用边界采样，不是完整填充多边形内部。
+- `oscillation` 当前是加罚，不是直接判非法。
+- 当前只支持差速底盘 `(v, w)`，不支持全向底盘 `vy` 采样。
+
+这些边界会影响复杂障碍场景下的绕障质量。后续如果要进一步接近原 ROS1 DWA，优先考虑把 `path_score / goal_score` 升级为基于局部 costmap 的 MapGrid 代价传播。

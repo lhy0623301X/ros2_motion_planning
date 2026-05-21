@@ -9,7 +9,7 @@ controller_server:
       controller_name: "DWA" # 算法名称，可选 PID / LQR / RPP / DWA
 
       heading_aligner:
-        enable_start_alignment: true # 起步时是否先原地对齐预瞄点方向
+        enable_start_alignment: false # 起步时是否先原地对齐预瞄点方向
         enable_goal_alignment: true # 终点角度对齐交给 Nav2 goal_checker / BT 处理
         control_frequency: 20.0 # 对齐模块控制频率 [Hz]
         start_alignment_max_distance: 2.0 # 机器人距离起步预瞄点超过该值后不再触发起步对齐 [m]
@@ -126,7 +126,7 @@ controller_server:
         max_linear_velocity_increment: 0.02 # 单周期最大线速度增量 [m/s]
         max_angular_velocity: 1.2 # 最大角速度 [rad/s]
         min_angular_velocity: 0.0 # 最小角速度 [rad/s]
-        max_angular_velocity_increment: 0.4 # 单周期最大角速度增量 [rad/s]
+        max_angular_velocity_increment: 0.8 # 单周期最大角速度增量 [rad/s]
 
         sim_time: 1.5 # 每个候选速度前向模拟时长 [s]
         sim_time_step: 0.1 # 前向模拟积分步长 [s]
@@ -134,8 +134,21 @@ controller_server:
         vtheta_samples: 15 # 角速度采样数量
 
         path_distance_bias: 2.0 # 轨迹终点贴近全局路径的权重
-        goal_distance_bias: 1.2 # 轨迹终点靠近目标的权重
+        goal_distance_bias: 1.0 # 轨迹终点靠近目标的权重
         obstacle_distance_bias: 0.02 # 轨迹经过高代价区域的权重
+        alignment_bias: 1.5 # 前鼻子贴近路径方向的权重
+        goal_front_bias: 1.0 # 前鼻子朝局部目标推进的权重
         velocity_bias: 4.0 # 鼓励更大的前向速度，避免低速轨迹长期占优
         twirling_bias: 0.8 # 惩罚过大的角速度，减少原地转圈
+        oscillation_bias: 5.0 # 惩罚短时间内角速度方向反复切换
         unknown_as_obstacle: false # 是否把未知区域视为障碍
+
+        forward_point_distance: 0.325 # 前鼻子评分点相对机器人中心的距离 [m]
+        alignment_goal_distance_scale: 1.0 # 接近目标时关闭 alignment 的距离系数
+        robot_radius: 0.18 # 未配置 footprint 时使用的圆形半径 [m]
+        footprint_scaling_speed: 0.25 # 速度超过该值后开始放大 footprint [m/s]
+        max_footprint_scaling_factor: 0.2 # footprint 最大放大比例
+        stop_time_buffer: 0.2 # 轨迹需预留的刹停安全时间 [s]
+        oscillation_reset_dist: 0.05 # 移动超过该距离后重置振荡状态 [m]
+        oscillation_reset_angle: 0.2 # 转过该角度后重置振荡状态 [rad]
+        oscillation_min_angular_velocity: 0.2 # 小于该角速度不记录振荡方向 [rad/s]

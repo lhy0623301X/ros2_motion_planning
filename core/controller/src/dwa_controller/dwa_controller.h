@@ -7,10 +7,12 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "controller_algorithm.h"
 #include "dwa_controller/dwa_types.h"
 #include "dwa_controller/dwa_visualizer.h"
+#include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
@@ -50,7 +52,11 @@ public:
 private:
   void readParameters();
   void prunePlan(const geometry_msgs::msg::PoseStamped & robot_pose);
-  DWATrajectory plan(const DWAState & state) const;
+  DWATrajectory plan(const DWAState & state);
+  void resetOscillationState();
+  void resetOscillationStateIfNeeded(const DWAState & state);
+  double scoreOscillation(const DWATrajectory & trajectory) const;
+  void updateOscillationState(const DWAState & state, const DWATrajectory & best);
   double linearRegularization(double current, double desired) const;
   double angularRegularization(double current, double desired) const;
 
@@ -62,6 +68,12 @@ private:
   nav_msgs::msg::Path global_plan_;
   DWAControllerConfig cfg_;
   std::unique_ptr<DWAVisualizer> visualizer_;
+  std::vector<geometry_msgs::msg::Point> footprint_;
+  bool has_oscillation_reset_pose_{false};
+  double oscillation_reset_x_{0.0};
+  double oscillation_reset_y_{0.0};
+  double oscillation_reset_theta_{0.0};
+  int last_angular_sign_{0};
   double nominal_max_linear_velocity_{0.6};
 };
 

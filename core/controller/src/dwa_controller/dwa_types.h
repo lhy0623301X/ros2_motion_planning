@@ -26,13 +26,33 @@ struct DWAControllerConfig
   int vx_samples{5};
   int vtheta_samples{15};
 
-  // 评分权重：path/goal/obstacle 负责贴路径与避障，velocity/twirling 抑制原地转圈。
+  // 评分权重：path/goal/obstacle 负责贴路径与避障，其余项负责姿态、速度和振荡偏好。
   double path_distance_bias{1.0};
   double goal_distance_bias{1.2};
   double obstacle_distance_bias{0.02};
+  double alignment_bias{1.5};
+  double goal_front_bias{1.0};
   double velocity_bias{4.0};
   double twirling_bias{0.8};
+  double oscillation_bias{5.0};
   bool unknown_as_obstacle{false};
+
+  // 前鼻子评分点：从机器人中心沿当前朝向前移，用于 alignment / goal_front。
+  double forward_point_distance{0.325};
+  double alignment_goal_distance_scale{1.0};
+
+  // footprint 碰撞和随速度膨胀的保守检查。
+  double robot_radius{0.18};
+  double footprint_scaling_speed{0.25};
+  double max_footprint_scaling_factor{0.2};
+
+  // stop_time_buffer 用当前速度和减速度估计刹停安全时间。
+  double stop_time_buffer{0.2};
+
+  // oscillation control：未走出一段距离/角度前，惩罚角速度方向反复切换。
+  double oscillation_reset_dist{0.05};
+  double oscillation_reset_angle{0.2};
+  double oscillation_min_angular_velocity{0.2};
 };
 
 struct DWAState

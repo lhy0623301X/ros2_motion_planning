@@ -33,6 +33,28 @@ double planarDistance(
     lhs.pose.position.y - rhs.pose.position.y);
 }
 
+double normalizeAngle(double angle)
+{
+  while (angle > M_PI) {
+    angle -= 2.0 * M_PI;
+  }
+  while (angle < -M_PI) {
+    angle += 2.0 * M_PI;
+  }
+  return angle;
+}
+
+int signWithDeadband(double value, double deadband)
+{
+  if (value > deadband) {
+    return 1;
+  }
+  if (value < -deadband) {
+    return -1;
+  }
+  return 0;
+}
+
 }  // namespace
 
 void DWAController::configure(
@@ -50,6 +72,7 @@ void DWAController::configure(
   costmap_ros_ = std::move(costmap_ros);
   readParameters();
   nominal_max_linear_velocity_ = cfg_.max_linear_velocity;
+  footprint_ = costmap_ros_ ? costmap_ros_->getRobotFootprint() : std::vector<geometry_msgs::msg::Point>{};
   visualizer_ = std::make_unique<DWAVisualizer>(node_, "dwa_trajectories");
   RCLCPP_INFO(node_->get_logger(), "%s configured in minimal DWA mode.", controller_name_.c_str());
 }
@@ -57,6 +80,8 @@ void DWAController::configure(
 void DWAController::cleanup()
 {
   global_plan_.poses.clear();
+  footprint_.clear();
+  resetOscillationState();
   visualizer_.reset();
 }
 
@@ -73,6 +98,7 @@ void DWAController::deactivate()
 void DWAController::setPlan(const nav_msgs::msg::Path & path)
 {
   global_plan_ = path;
+  resetOscillationState();
   RCLCPP_INFO(node_->get_logger(), "DWAController received path with %zu poses.", path.poses.size());
 }
 
@@ -101,6 +127,7 @@ geometry_msgs::msg::TwistStamped DWAController::computeVelocityCommands(
   state.theta = tf2::getYaw(pose.pose.orientation);
   state.v = velocity.linear.x;
   state.w = velocity.angular.z;
+  footprint_ = costmap_ros_ ? costmap_ros_->getRobotFootprint() : footprint_;
 
   // 步骤 3：在当前动态窗口内采样轨迹，并选择综合代价最低的合法轨迹。
   const auto best = plan(state);
@@ -163,12 +190,38 @@ void DWAController::readParameters()
     parameter_prefix_ + "goal_distance_bias", cfg_.goal_distance_bias);
   cfg_.obstacle_distance_bias = node_->declare_parameter<double>(
     parameter_prefix_ + "obstacle_distance_bias", cfg_.obstacle_distance_bias);
+  cfg_.alignment_bias = node_->declare_parameter<double>(
+    parameter_prefix_ + "alignment_bias", cfg_.alignment_bias);
+  cfg_.goal_front_bias = node_->declare_parameter<double>(
+    parameter_prefix_ + "goal_front_bias", cfg_.goal_front_bias);
   cfg_.velocity_bias = node_->declare_parameter<double>(
     parameter_prefix_ + "velocity_bias", cfg_.velocity_bias);
   cfg_.twirling_bias = node_->declare_parameter<double>(
     parameter_prefix_ + "twirling_bias", cfg_.twirling_bias);
+  cfg_.oscillation_bias = node_->declare_parameter<double>(
+    parameter_prefix_ + "oscillation_bias", cfg_.oscillation_bias);
   cfg_.unknown_as_obstacle = node_->declare_parameter<bool>(
     parameter_prefix_ + "unknown_as_obstacle", cfg_.unknown_as_obstacle);
+
+  cfg_.forward_point_distance = node_->declare_parameter<double>(
+    parameter_prefix_ + "forward_point_distance", cfg_.forward_point_distance);
+  cfg_.alignment_goal_distance_scale = node_->declare_parameter<double>(
+    parameter_prefix_ + "alignment_goal_distance_scale", cfg_.alignment_goal_distance_scale);
+  cfg_.robot_radius = node_->declare_parameter<double>(
+    parameter_prefix_ + "robot_radius", cfg_.robot_radius);
+  cfg_.footprint_scaling_speed = node_->declare_parameter<double>(
+    parameter_prefix_ + "footprint_scaling_speed", cfg_.footprint_scaling_speed);
+  cfg_.max_footprint_scaling_factor = node_->declare_parameter<double>(
+    parameter_prefix_ + "max_footprint_scaling_factor", cfg_.max_footprint_scaling_factor);
+  cfg_.stop_time_buffer = node_->declare_parameter<double>(
+    parameter_prefix_ + "stop_time_buffer", cfg_.stop_time_buffer);
+  cfg_.oscillation_reset_dist = node_->declare_parameter<double>(
+    parameter_prefix_ + "oscillation_reset_dist", cfg_.oscillation_reset_dist);
+  cfg_.oscillation_reset_angle = node_->declare_parameter<double>(
+    parameter_prefix_ + "oscillation_reset_angle", cfg_.oscillation_reset_angle);
+  cfg_.oscillation_min_angular_velocity = node_->declare_parameter<double>(
+    parameter_prefix_ + "oscillation_min_angular_velocity",
+    cfg_.oscillation_min_angular_velocity);
 }
 
 void DWAController::prunePlan(const geometry_msgs::msg::PoseStamped & robot_pose)
@@ -203,8 +256,10 @@ void DWAController::prunePlan(const geometry_msgs::msg::PoseStamped & robot_pose
   }
 }
 
-DWATrajectory DWAController::plan(const DWAState & state) const
+DWATrajectory DWAController::plan(const DWAState & state)
 {
+  resetOscillationStateIfNeeded(state);
+
   // 步骤 1：根据当前速度和速度变化率限制，得到本周期可采样的动态窗口。
   const auto window = dwa_motion::calcDynamicWindow(cfg_, state);
 
@@ -219,7 +274,8 @@ DWATrajectory DWAController::plan(const DWAState & state) const
   for (auto & trajectory : trajectories) {
     // 步骤 3：碰撞轨迹直接丢弃，合法轨迹按综合代价取最小。
     const double score = dwa_critic::evaluateTrajectory(
-      trajectory, global_plan_, costmap, cfg_);
+      trajectory, global_plan_, costmap, footprint_, cfg_) +
+      scoreOscillation(trajectory);
     if (!std::isfinite(score)) {
       continue;
     }
@@ -241,7 +297,62 @@ DWATrajectory DWAController::plan(const DWAState & state) const
     }
     visualizer_->publish(trajectories, best, frame_id, node_->now());
   }
+  updateOscillationState(state, best);
   return best;
+}
+
+void DWAController::resetOscillationState()
+{
+  has_oscillation_reset_pose_ = false;
+  oscillation_reset_x_ = 0.0;
+  oscillation_reset_y_ = 0.0;
+  oscillation_reset_theta_ = 0.0;
+  last_angular_sign_ = 0;
+}
+
+void DWAController::resetOscillationStateIfNeeded(const DWAState & state)
+{
+  if (!has_oscillation_reset_pose_) {
+    oscillation_reset_x_ = state.x;
+    oscillation_reset_y_ = state.y;
+    oscillation_reset_theta_ = state.theta;
+    has_oscillation_reset_pose_ = true;
+    return;
+  }
+
+  const double moved = std::hypot(state.x - oscillation_reset_x_, state.y - oscillation_reset_y_);
+  const double turned = std::fabs(normalizeAngle(state.theta - oscillation_reset_theta_));
+  if (moved >= cfg_.oscillation_reset_dist || turned >= cfg_.oscillation_reset_angle) {
+    oscillation_reset_x_ = state.x;
+    oscillation_reset_y_ = state.y;
+    oscillation_reset_theta_ = state.theta;
+    last_angular_sign_ = 0;
+  }
+}
+
+double DWAController::scoreOscillation(const DWATrajectory & trajectory) const
+{
+  if (last_angular_sign_ == 0) {
+    return 0.0;
+  }
+  const int candidate_sign = signWithDeadband(
+    trajectory.command.w, cfg_.oscillation_min_angular_velocity);
+  if (candidate_sign == 0 || candidate_sign == last_angular_sign_) {
+    return 0.0;
+  }
+  return cfg_.oscillation_bias;
+}
+
+void DWAController::updateOscillationState(const DWAState & state, const DWATrajectory & best)
+{
+  if (!best.legal) {
+    return;
+  }
+  resetOscillationStateIfNeeded(state);
+  const int sign = signWithDeadband(best.command.w, cfg_.oscillation_min_angular_velocity);
+  if (sign != 0) {
+    last_angular_sign_ = sign;
+  }
 }
 
 double DWAController::linearRegularization(double current, double desired) const
