@@ -125,7 +125,6 @@ geometry_msgs::msg::TwistStamped LQRController::computeVelocityCommands(
   Eigen::Vector3d s(pose.pose.position.x, pose.pose.position.y, current_yaw);
   Eigen::Vector3d s_d(ref.x, ref.y, ref.theta);
   // 参考输入 u_r = [v_ref, w_ref]，其中 w_ref = v_ref * kappa_ref。
-  // 这里先保持与原项目一致，使用当前速度作为参考线速度。
   Eigen::Vector2d u_r(current_v, current_v * ref.kappa);
   Eigen::Vector2d u = lqrControl(s, s_d, u_r);
 
@@ -269,7 +268,7 @@ LQRController::ReferencePoint LQRController::computeReferencePoint(
       py = prev_pose_it->pose.position.y;
     }
 
-    // 保持原项目思路：不是直接拿离散路径点，而是求“路径段与前视圆”的交点，
+    // 求“路径段与前视圆”的交点，
     // 这样参考点会更贴近真实前视距离，而不是跳在某个栅格点上。
     Vec2d prev_p(px - rx, py - ry);
     Vec2d goal_p(gx - rx, gy - ry);
@@ -297,7 +296,9 @@ LQRController::ReferencePoint LQRController::computeReferencePoint(
         kappa = 0.0;
       }
     }
-    lookahead_pt.setTheta(std::atan2(gy - py, gx - px));
+    // 参考朝向改为当前位置指向参考点的连线方向，
+    // 让 LQR 的参考姿态和当前控制周期的“前视目标方向”保持一致。
+    lookahead_pt.setTheta(std::atan2(lookahead_pt.y() - ry, lookahead_pt.x() - rx));
   }
 
   return {lookahead_pt.x(), lookahead_pt.y(), lookahead_pt.theta(), kappa};

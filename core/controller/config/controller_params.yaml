@@ -76,22 +76,22 @@ controller_server:
         goal_dist_tolerance: 0.2 # 到达目标的位置距离容差 [m]
         rotate_tolerance: 0.25 # 保留参数，与原项目对齐
 
-        max_linear_velocity: 0.6 # 最大线速度 [m/s]
+        max_linear_velocity: 1.2 # 最大线速度 [m/s]
         min_linear_velocity: 0.0 # 最小线速度 [m/s]
         max_linear_velocity_increment: 0.015 # 单周期最大线速度增量 [m/s]
         max_angular_velocity: 1.2 # 最大角速度 [rad/s]
         min_angular_velocity: 0.0 # 最小角速度 [rad/s]
         max_angular_velocity_increment: 0.2 # 单周期最大角速度增量 [rad/s]
 
-        lookahead_time: 1.0 # 前视时间 [s]
+        lookahead_time: 0.8 # 前视时间 [s]
         min_lookahead_dist: 0.3 # 最小前视距离 [m]
-        max_lookahead_dist: 0.9 # 最大前视距离 [m]
+        max_lookahead_dist: 1.2 # 最大前视距离 [m]
 
         solver_max_iterations: 100 # Riccati 迭代最大次数
         solver_eps: 0.1 # Riccati 迭代收敛阈值
 
         q_matrix_x: 1.0 # 状态误差权重 Q_x
         q_matrix_y: 1.0 # 状态误差权重 Q_y
-        q_matrix_theta: 1.0 # 状态误差权重 Q_theta
+        q_matrix_theta: 1.5 # 状态误差权重 Q_theta
         r_matrix_v: 1.0 # 控制输入权重 R_v
         r_matrix_w: 1.0 # 控制输入权重 R_w

@@ -3,7 +3,8 @@ Panels:
     Help Height: 78
     Name: Displays
     Property Tree Widget:
-      Expanded: ~
+      Expanded:
+        - /Marker1
       Splitter Ratio: 0.5
     Tree Height: 671
   - Class: rviz_common/Selection
@@ -366,7 +367,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /pid_lookahead_point
+        Value: /lookahead_point
       Value: true
   Enabled: true
   Global Options:
@@ -406,16 +407,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 30.29745101928711
+      Distance: 20.89185333251953
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.409208744764328
-        Y: -0.6018062829971313
-        Z: 0.19460302591323853
+        X: 2.0304102897644043
+        Y: -2.6673684120178223
+        Z: 0.8198657035827637
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
