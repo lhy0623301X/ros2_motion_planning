@@ -97,6 +97,18 @@ struct DWATrajectory
   bool legal{false};
 };
 
+struct DWAMapGrid
+{
+  // 在局部 costmap 可通行区域中传播出来的路径/目标代价场。
+  unsigned int width{0};
+  unsigned int height{0};
+  double resolution{0.0};
+  double unreachable_cost{1.0e9};
+  bool valid{false};
+  std::vector<double> path_costs;
+  std::vector<double> goal_costs;
+};
+
 }  // namespace rmp::controller
 
 #endif  // RMP_CONTROLLER_DWA_TYPES_H_

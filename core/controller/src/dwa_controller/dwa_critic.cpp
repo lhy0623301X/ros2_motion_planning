@@ -6,7 +6,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <queue>
+#include <utility>
 #include <vector>
 
 #include "nav2_costmap_2d/cost_values.hpp"
@@ -35,6 +38,28 @@ const DWATrajectoryPoint * terminalPoint(const DWATrajectory & trajectory)
     return nullptr;
   }
   return &trajectory.points.back();
+}
+
+std::size_t gridIndex(unsigned int x, unsigned int y, unsigned int width)
+{
+  return static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+         static_cast<std::size_t>(x);
+}
+
+bool isTraversable(
+  const nav2_costmap_2d::Costmap2D * costmap,
+  unsigned int x,
+  unsigned int y,
+  const DWAControllerConfig & config)
+{
+  if (!costmap) {
+    return false;
+  }
+  const unsigned char cost = costmap->getCost(x, y);
+  if (cost == nav2_costmap_2d::NO_INFORMATION) {
+    return !config.unknown_as_obstacle;
+  }
+  return cost < nav2_costmap_2d::LETHAL_OBSTACLE;
 }
 
 unsigned char costAtWorld(
@@ -274,7 +299,120 @@ unsigned char maxTrajectoryFootprintCost(
   return max_cost;
 }
 
+void addMapGridSource(
+  const nav2_costmap_2d::Costmap2D * costmap,
+  const geometry_msgs::msg::PoseStamped & pose,
+  const DWAControllerConfig & config,
+  std::vector<double> & costs,
+  std::priority_queue<
+    std::pair<double, std::size_t>,
+    std::vector<std::pair<double, std::size_t>>,
+    std::greater<std::pair<double, std::size_t>>> & queue)
+{
+  unsigned int mx = 0;
+  unsigned int my = 0;
+  if (!costmap->worldToMap(pose.pose.position.x, pose.pose.position.y, mx, my) ||
+      !isTraversable(costmap, mx, my, config))
+  {
+    return;
+  }
+
+  const auto index = gridIndex(mx, my, costmap->getSizeInCellsX());
+  if (costs[index] > 0.0) {
+    costs[index] = 0.0;
+    queue.push({0.0, index});
+  }
+}
+
+void propagateMapGrid(
+  const nav2_costmap_2d::Costmap2D * costmap,
+  const DWAControllerConfig & config,
+  std::vector<double> & costs,
+  std::priority_queue<
+    std::pair<double, std::size_t>,
+    std::vector<std::pair<double, std::size_t>>,
+    std::greater<std::pair<double, std::size_t>>> & queue)
+{
+  const unsigned int width = costmap->getSizeInCellsX();
+  const unsigned int height = costmap->getSizeInCellsY();
+  const double resolution = costmap->getResolution();
+
+  constexpr int kDx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
+  constexpr int kDy[8] = {0, 0, 1, -1, 1, -1, 1, -1};
+
+  while (!queue.empty()) {
+    const auto [current_cost, current_index] = queue.top();
+    queue.pop();
+    if (current_cost > costs[current_index]) {
+      continue;
+    }
+
+    const auto x = static_cast<int>(current_index % width);
+    const auto y = static_cast<int>(current_index / width);
+    for (int i = 0; i < 8; ++i) {
+      const int nx = x + kDx[i];
+      const int ny = y + kDy[i];
+      if (nx < 0 || ny < 0 || nx >= static_cast<int>(width) || ny >= static_cast<int>(height)) {
+        continue;
+      }
+      if (!isTraversable(costmap, static_cast<unsigned int>(nx), static_cast<unsigned int>(ny), config)) {
+        continue;
+      }
+
+      const auto neighbor_index = gridIndex(
+        static_cast<unsigned int>(nx), static_cast<unsigned int>(ny), width);
+      const double step_cost = ((kDx[i] == 0 || kDy[i] == 0) ? 1.0 : std::sqrt(2.0)) * resolution;
+      const double next_cost = current_cost + step_cost;
+      if (next_cost < costs[neighbor_index]) {
+        costs[neighbor_index] = next_cost;
+        queue.push({next_cost, neighbor_index});
+      }
+    }
+  }
+}
+
 }  // namespace
+
+DWAMapGrid buildMapGridCosts(
+  const nav_msgs::msg::Path & path,
+  const nav2_costmap_2d::Costmap2D * costmap,
+  const DWAControllerConfig & config)
+{
+  DWAMapGrid map_grid;
+  if (!costmap || path.poses.empty()) {
+    return map_grid;
+  }
+
+  map_grid.width = costmap->getSizeInCellsX();
+  map_grid.height = costmap->getSizeInCellsY();
+  map_grid.resolution = costmap->getResolution();
+  const std::size_t cells =
+    static_cast<std::size_t>(map_grid.width) * static_cast<std::size_t>(map_grid.height);
+  if (cells == 0) {
+    return map_grid;
+  }
+
+  map_grid.path_costs.assign(cells, map_grid.unreachable_cost);
+  map_grid.goal_costs.assign(cells, map_grid.unreachable_cost);
+
+  using Queue = std::priority_queue<
+    std::pair<double, std::size_t>,
+    std::vector<std::pair<double, std::size_t>>,
+    std::greater<std::pair<double, std::size_t>>>;
+
+  Queue path_queue;
+  for (const auto & pose : path.poses) {
+    addMapGridSource(costmap, pose, config, map_grid.path_costs, path_queue);
+  }
+  propagateMapGrid(costmap, config, map_grid.path_costs, path_queue);
+
+  Queue goal_queue;
+  addMapGridSource(costmap, path.poses.back(), config, map_grid.goal_costs, goal_queue);
+  propagateMapGrid(costmap, config, map_grid.goal_costs, goal_queue);
+
+  map_grid.valid = true;
+  return map_grid;
+}
 
 bool checkCollision(
   const DWATrajectory & trajectory,
@@ -309,30 +447,42 @@ double scoreObstacle(
 
 double scorePath(
   const DWATrajectory & trajectory,
-  const nav_msgs::msg::Path & path)
+  const DWAMapGrid & map_grid,
+  const nav2_costmap_2d::Costmap2D * costmap)
 {
-  // 最小版 DWA 只用轨迹终点评价路径贴合，成本低，行为也容易解释。
+  // 步骤 2：使用 MapGrid 代价场评价终点到路径的可通行传播距离。
   const auto * end = terminalPoint(trajectory);
-  if (!end || path.poses.empty()) {
+  if (!end || !costmap || !map_grid.valid || map_grid.path_costs.empty()) {
     return std::numeric_limits<double>::max();
   }
 
-  double min_distance = std::numeric_limits<double>::max();
-  for (const auto & pose : path.poses) {
-    min_distance = std::min(min_distance, distanceToPose(*end, pose));
+  unsigned int mx = 0;
+  unsigned int my = 0;
+  if (!costmap->worldToMap(end->x, end->y, mx, my)) {
+    return map_grid.unreachable_cost;
   }
-  return min_distance;
+  const auto index = gridIndex(mx, my, map_grid.width);
+  return index < map_grid.path_costs.size() ? map_grid.path_costs[index] : map_grid.unreachable_cost;
 }
 
 double scoreGoal(
   const DWATrajectory & trajectory,
-  const nav_msgs::msg::Path & path)
+  const DWAMapGrid & map_grid,
+  const nav2_costmap_2d::Costmap2D * costmap)
 {
+  // 步骤 3：使用 MapGrid 代价场评价终点到局部目标的可通行传播距离。
   const auto * end = terminalPoint(trajectory);
-  if (!end || path.poses.empty()) {
+  if (!end || !costmap || !map_grid.valid || map_grid.goal_costs.empty()) {
     return std::numeric_limits<double>::max();
   }
-  return distanceToPose(*end, path.poses.back());
+
+  unsigned int mx = 0;
+  unsigned int my = 0;
+  if (!costmap->worldToMap(end->x, end->y, mx, my)) {
+    return map_grid.unreachable_cost;
+  }
+  const auto index = gridIndex(mx, my, map_grid.width);
+  return index < map_grid.goal_costs.size() ? map_grid.goal_costs[index] : map_grid.unreachable_cost;
 }
 
 double scoreAlignment(
@@ -414,6 +564,7 @@ double evaluateTrajectory(
   const DWATrajectory & trajectory,
   const nav_msgs::msg::Path & path,
   const nav2_costmap_2d::Costmap2D * costmap,
+  const DWAMapGrid & map_grid,
   const std::vector<geometry_msgs::msg::Point> & footprint,
   const DWAControllerConfig & config)
 {
@@ -422,8 +573,8 @@ double evaluateTrajectory(
     return std::numeric_limits<double>::infinity();
   }
 
-  const double path_score = scorePath(trajectory, path);
-  const double goal_score = scoreGoal(trajectory, path);
+  const double path_score = scorePath(trajectory, map_grid, costmap);
+  const double goal_score = scoreGoal(trajectory, map_grid, costmap);
   const double obstacle_score = scoreObstacle(trajectory, costmap, footprint, config);
   const double alignment_score = scoreAlignment(trajectory, path, config);
   const double goal_front_score = scoreGoalFront(trajectory, path, config);

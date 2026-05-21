@@ -271,10 +271,11 @@ DWATrajectory DWAController::plan(const DWAState & state)
   best.legal = false;
 
   const auto * costmap = costmap_ros_ ? costmap_ros_->getCostmap() : nullptr;
+  const auto map_grid = dwa_critic::buildMapGridCosts(global_plan_, costmap, cfg_);
   for (auto & trajectory : trajectories) {
     // 步骤 3：碰撞轨迹直接丢弃，合法轨迹按综合代价取最小。
     const double score = dwa_critic::evaluateTrajectory(
-      trajectory, global_plan_, costmap, footprint_, cfg_) +
+      trajectory, global_plan_, costmap, map_grid, footprint_, cfg_) +
       scoreOscillation(trajectory);
     if (!std::isfinite(score)) {
       continue;

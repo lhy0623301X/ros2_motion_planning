@@ -14,6 +14,12 @@
 
 namespace rmp::controller::dwa_critic {
 
+// 基于局部 costmap 构建 MapGrid 代价场：path 从路径点传播，goal 从路径终点传播。
+DWAMapGrid buildMapGridCosts(
+  const nav_msgs::msg::Path & path,
+  const nav2_costmap_2d::Costmap2D * costmap,
+  const DWAControllerConfig & config);
+
 // 硬约束：轨迹任一点碰到致命/膨胀障碍则判为非法。
 bool checkCollision(
   const DWATrajectory & trajectory,
@@ -28,15 +34,17 @@ double scoreObstacle(
   const std::vector<geometry_msgs::msg::Point> & footprint,
   const DWAControllerConfig & config);
 
-// 软约束：轨迹终点到局部路径最近点的距离。
+// 软约束：轨迹终点到当前全局路径的 MapGrid 可通行传播距离。
 double scorePath(
   const DWATrajectory & trajectory,
-  const nav_msgs::msg::Path & path);
+  const DWAMapGrid & map_grid,
+  const nav2_costmap_2d::Costmap2D * costmap);
 
-// 软约束：轨迹终点到当前局部目标的距离。
+// 软约束：轨迹终点到当前局部目标的 MapGrid 可通行传播距离。
 double scoreGoal(
   const DWATrajectory & trajectory,
-  const nav_msgs::msg::Path & path);
+  const DWAMapGrid & map_grid,
+  const nav2_costmap_2d::Costmap2D * costmap);
 
 // 软约束：让机器人前鼻子贴近路径，间接约束车头方向。
 double scoreAlignment(
@@ -65,6 +73,7 @@ double evaluateTrajectory(
   const DWATrajectory & trajectory,
   const nav_msgs::msg::Path & path,
   const nav2_costmap_2d::Costmap2D * costmap,
+  const DWAMapGrid & map_grid,
   const std::vector<geometry_msgs::msg::Point> & footprint,
   const DWAControllerConfig & config);
 

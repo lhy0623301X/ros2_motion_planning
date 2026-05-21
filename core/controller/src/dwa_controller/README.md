@@ -186,20 +186,23 @@ obstacle_distance_bias
 
 ### 2. path_score
 
-`path_score` 衡量轨迹终点离当前全局路径有多远。
+`path_score` 衡量轨迹终点沿局部 costmap 可通行区域到当前全局路径的传播距离。
 
 这里的“当前全局路径”指的是 Nav2 传给控制器、并经过 `prunePlan()` 裁剪后的 `global_plan_`。它来源于全局规划器，不是 DWA 自己生成的局部路径。
 
 计算方式：
 
 ```text
-path_score = min_distance(trajectory_end, path_poses)
+1. 将当前全局路径上的可通行栅格作为 0 代价源点
+2. 在局部 costmap 的非致命障碍区域中做 Dijkstra 传播
+3. path_score = path_map_grid[trajectory_end_cell]
 ```
 
 含义：
 
-- 越贴近全局路径，分数越小。
-- 偏离路径绕障会让该分数变大。
+- 沿可通行空间越容易回到全局路径，分数越小。
+- 隔着障碍物的几何近距离不会被误判为低代价。
+- 偏离路径绕障会变贵，但只要能从可通行区域绕回路径，仍然有合理梯度。
 
 对应权重：
 
@@ -207,22 +210,24 @@ path_score = min_distance(trajectory_end, path_poses)
 path_distance_bias
 ```
 
-这项太大时，DWA 会过度贴全局路径，遇到路径上的障碍时不愿意绕开。  
+这项太大时，DWA 会过度贴全局路径，绕障时不愿意离开路径太远。  
 这项太小时，机器人可能绕得太散，不容易回到全局路径。
 
 ### 3. goal_score
 
-`goal_score` 衡量轨迹终点离当前局部目标有多远。
+`goal_score` 衡量轨迹终点沿局部 costmap 可通行区域到当前局部目标的传播距离。
 
 当前局部目标使用裁剪后的路径末端：
 
 ```text
-goal_score = distance(trajectory_end, path.back())
+1. 将当前局部目标所在可通行栅格作为 0 代价源点
+2. 在局部 costmap 的非致命障碍区域中做 Dijkstra 传播
+3. goal_score = goal_map_grid[trajectory_end_cell]
 ```
 
 含义：
 
-- 越朝路径终点推进，分数越小。
+- 沿可通行空间越接近路径终点，分数越小。
 - 这项鼓励机器人整体向目标前进，而不是只贴着路径局部摆动。
 
 对应权重：
@@ -469,10 +474,9 @@ stop_time_buffer
 
 当前 DWA 已经包含基本局部绕障能力，但仍是轻量实现：
 
-- `path_score` 仍是几何距离，不是原 ROS1 DWA 的 MapGrid 波前传播代价。
-- `goal_score` 也是几何距离，不是 costmap 上的 goal wavefront。
+- `path_score / goal_score` 已使用 MapGrid 传播代价，但还没有实现原 ROS1 DWA 那套完整 `MapGridCostFunction` 的所有细节。
 - footprint 检查使用边界采样，不是完整填充多边形内部。
 - `oscillation` 当前是加罚，不是直接判非法。
 - 当前只支持差速底盘 `(v, w)`，不支持全向底盘 `vy` 采样。
 
-这些边界会影响复杂障碍场景下的绕障质量。后续如果要进一步接近原 ROS1 DWA，优先考虑把 `path_score / goal_score` 升级为基于局部 costmap 的 MapGrid 代价传播。
+这些边界会影响复杂障碍场景下的绕障质量。后续如果要进一步接近原 ROS1 DWA，可以继续完善 MapGrid 的 unreachable 处理、代价归一化和可视化调试。
