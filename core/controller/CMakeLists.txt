@@ -26,6 +26,7 @@ add_library(${PROJECT_NAME} SHARED
   src/controller_node.cpp
   src/lqr_controller/lqr_controller.cpp
   src/pid_controller/pid_controller.cpp
+  src/rpp_controller/rpp_controller.cpp
   src/utils/curvature_speed_limiter.cpp
   src/utils/heading_aligner.cpp
   src/utils/lookahead_point_publisher.cpp
@@ -75,6 +76,7 @@ install(
   DIRECTORY
     src/lqr_controller
     src/pid_controller
+    src/rpp_controller
     src/utils
   DESTINATION include/${PROJECT_NAME}
   FILES_MATCHING PATTERN "*.h"

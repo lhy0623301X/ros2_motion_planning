@@ -9,6 +9,7 @@
 
 #include "lqr_controller/lqr_controller.h"
 #include "pid_controller/pid_controller.h"
+#include "rpp_controller/rpp_controller.h"
 
 namespace rmp::controller {
 
@@ -36,6 +37,9 @@ std::shared_ptr<ControllerAlgorithm> ControllerFactory::create(
   }
   if (normalized_name == "lqr" || normalized_name == "lqrcontroller") {
     return std::make_shared<LQRController>();
+  }
+  if (normalized_name == "rpp" || normalized_name == "rppcontroller") {
+    return std::make_shared<RPPController>();
   }
   return nullptr;
 }
