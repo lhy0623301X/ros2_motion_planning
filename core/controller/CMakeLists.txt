@@ -24,6 +24,7 @@ add_library(${PROJECT_NAME} SHARED
   src/controller_algorithm.cpp
   src/controller_factory.cpp
   src/controller_node.cpp
+  src/lqr_controller/lqr_controller.cpp
   src/pid_controller/pid_controller.cpp
   src/utils/curvature_speed_limiter.cpp
   src/utils/heading_aligner.cpp
@@ -72,6 +73,7 @@ install(
 
 install(
   DIRECTORY
+    src/lqr_controller
     src/pid_controller
     src/utils
   DESTINATION include/${PROJECT_NAME}

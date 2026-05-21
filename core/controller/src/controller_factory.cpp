@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include "lqr_controller/lqr_controller.h"
 #include "pid_controller/pid_controller.h"
 
 namespace rmp::controller {
@@ -32,6 +33,9 @@ std::shared_ptr<ControllerAlgorithm> ControllerFactory::create(
   const auto normalized_name = normalizeName(controller_name);
   if (normalized_name == "pid" || normalized_name == "pidcontroller") {
     return std::make_shared<PIDController>();
+  }
+  if (normalized_name == "lqr" || normalized_name == "lqrcontroller") {
+    return std::make_shared<LQRController>();
   }
   return nullptr;
 }

@@ -72,7 +72,7 @@ void PIDController::configure(
   readParameters();
   nominal_max_linear_velocity_ = cfg_.max_linear_velocity;
   lookahead_point_publisher_ =
-    std::make_unique<utils::LookaheadPointPublisher>(node_, "pid_lookahead_point");
+    std::make_unique<utils::LookaheadPointPublisher>(node_, "lookahead_point");
   resetPidState();
 
   RCLCPP_INFO(
