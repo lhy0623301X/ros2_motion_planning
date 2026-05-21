@@ -24,6 +24,10 @@ add_library(${PROJECT_NAME} SHARED
   src/controller_algorithm.cpp
   src/controller_factory.cpp
   src/controller_node.cpp
+  src/dwa_controller/dwa_controller.cpp
+  src/dwa_controller/dwa_critic.cpp
+  src/dwa_controller/dwa_motion.cpp
+  src/dwa_controller/dwa_visualizer.cpp
   src/lqr_controller/lqr_controller.cpp
   src/pid_controller/pid_controller.cpp
   src/rpp_controller/rpp_controller.cpp
@@ -74,6 +78,7 @@ install(
 
 install(
   DIRECTORY
+    src/dwa_controller
     src/lqr_controller
     src/pid_controller
     src/rpp_controller

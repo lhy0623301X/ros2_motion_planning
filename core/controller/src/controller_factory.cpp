@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include "dwa_controller/dwa_controller.h"
 #include "lqr_controller/lqr_controller.h"
 #include "pid_controller/pid_controller.h"
 #include "rpp_controller/rpp_controller.h"
@@ -40,6 +41,9 @@ std::shared_ptr<ControllerAlgorithm> ControllerFactory::create(
   }
   if (normalized_name == "rpp" || normalized_name == "rppcontroller") {
     return std::make_shared<RPPController>();
+  }
+  if (normalized_name == "dwa" || normalized_name == "dwacontroller") {
+    return std::make_shared<DWAController>();
   }
   return nullptr;
 }
