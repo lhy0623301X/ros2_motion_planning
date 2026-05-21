@@ -30,7 +30,14 @@ controller_server:
         max_decel: 0.2 # 用于计算距离限速曲线的最大减速度 [m/s^2]
         brake_distance_scale: 1.5 # 理论减速距离安全系数，越大越早减速
         brake_distance_buffer: 0.2 # 理论刹车距离外的固定安全余量 [m]
-        min_linear_velocity: 0.0 # 限速结果低于该值时输出 0 [m/s]
+
+      curvature_speed_limiter:
+        enabled: true # 是否根据局部路径曲率限制前向速度
+        max_lateral_accel: 0.6 # 横向加速度上限 [m/s^2]，越小越保守
+        min_linear_velocity: 0.0 # 曲率限速结果低于该值时输出 0 [m/s]
+        curvature_epsilon: 0.001 # 曲率接近 0 时的保护项，避免除零
+        sample_distance: 0.25 # 曲率采样点沿路径的间隔 [m]
+        preview_distance: 1.5 # 从机器人前方多远范围内搜索最大曲率 [m]
 
       PID:
         control_frequency: 20.0 # 控制器内部计算频率 [Hz]
@@ -51,9 +58,9 @@ controller_server:
         p_linear_velocity: 1.0 # 线速度比例增益，越大响应越快但更容易振荡
         i_linear_velocity: 0.0 # 线速度积分增益，用于消除稳态误差
         d_linear_velocity: 0.0 # 线速度微分增益，用于抑制快速变化
-        p_angular_velocity: 1.5 # 角速度比例增益，越大转向越积极
-        i_angular_velocity: 0.4 # 角速度积分增益，用于消除角度稳态误差
-        d_angular_velocity: 0.2 # 角速度微分增益，用于抑制转向振荡
+        p_angular_velocity: 3.0 # 角速度比例增益，越大转向越积极
+        i_angular_velocity: 0.3 # 角速度积分增益，用于消除角度稳态误差
+        d_angular_velocity: 0.3 # 角速度微分增益，用于抑制转向振荡
 
         k_feedback: 2.0 # 保留参数，当前双通道 PID 不再使用
         dist_from_center_to_front_edge: 0.20 # 保留参数，当前双通道 PID 不再使用

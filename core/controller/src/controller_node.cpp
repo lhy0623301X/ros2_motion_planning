@@ -30,6 +30,7 @@ void ControllerNode::configure(
   controller_name_ = node_->declare_parameter<std::string>(
     plugin_name_ + ".controller_name", "PID");
   heading_aligner_.configure(node_, plugin_name_ + ".heading_aligner.");
+  curvature_speed_limiter_.configure(node_, plugin_name_ + ".curvature_speed_limiter.");
   const auto goal_speed_prefix = plugin_name_ + ".goal_speed_limiter.";
   goal_speed_limit_cfg_.enabled = node_->declare_parameter<bool>(
     goal_speed_prefix + "enabled", goal_speed_limit_cfg_.enabled);
@@ -132,6 +133,8 @@ geometry_msgs::msg::TwistStamped ControllerNode::computeVelocityCommands(
   }
 
   auto tracking_cmd = controller_->computeVelocityCommands(plan_frame_pose, velocity, goal_checker);
+  tracking_cmd.twist.linear.x = curvature_speed_limiter_.limitSpeed(
+    tracking_cmd.twist.linear.x, global_plan_, plan_frame_pose);
   const double distance_to_goal = std::hypot(
     goal_pose.pose.position.x - plan_frame_pose.pose.position.x,
     goal_pose.pose.position.y - plan_frame_pose.pose.position.y);

@@ -25,6 +25,7 @@ add_library(${PROJECT_NAME} SHARED
   src/controller_factory.cpp
   src/controller_node.cpp
   src/pid_controller/pid_controller.cpp
+  src/utils/curvature_speed_limiter.cpp
   src/utils/heading_aligner.cpp
   src/utils/lookahead_point_publisher.cpp
 )

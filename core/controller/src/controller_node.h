@@ -10,6 +10,7 @@
 
 #include "controller_algorithm.h"
 #include "nav2_core/controller.hpp"
+#include "utils/curvature_speed_limiter.h"
 #include "utils/heading_aligner.h"
 
 namespace rmp::controller {
@@ -46,6 +47,7 @@ private:
   std::shared_ptr<ControllerAlgorithm> controller_;
   nav_msgs::msg::Path global_plan_;
   utils::HeadingAligner heading_aligner_;
+  utils::CurvatureSpeedLimiter curvature_speed_limiter_;
   ControllerAlgorithm::GoalSpeedLimitConfig goal_speed_limit_cfg_;
 };
 
