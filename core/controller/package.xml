@@ -10,6 +10,7 @@
 
   <depend>common</depend>
   <depend>geometry_msgs</depend>
+  <depend>libg2o</depend>
   <depend>nav2_core</depend>
   <depend>nav2_costmap_2d</depend>
   <depend>nav_msgs</depend>

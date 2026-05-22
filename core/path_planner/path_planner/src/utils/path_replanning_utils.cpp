@@ -80,11 +80,11 @@ ReplanningDecision shouldReplan(
 
   // 步骤 3：从最近路径点往前检查剩余路径是否被阻挡。
   // 只要剩余路径上任一点落入障碍物或 costmap 外，就触发重规划。
-  for (std::size_t i = decision.nearest_index; i < last_path.size(); ++i) {
-    if (isPointBlocked(last_path[i], costmap, config)) {
-      return decision;
-    }
-  }
+  // for (std::size_t i = decision.nearest_index; i < last_path.size(); ++i) {
+  //   if (isPointBlocked(last_path[i], costmap, config)) {
+  //     return decision;
+  //   }
+  // }
 
   // 步骤 4：若距离足够近且剩余路径畅通，则复用旧路径，不进行重规划。
   decision.need_replanning = false;

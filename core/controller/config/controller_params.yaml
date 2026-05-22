@@ -6,7 +6,7 @@
 controller_server:
   ros__parameters:
     FollowPath:
-      controller_name: "DWA" # 算法名称，可选 PID / LQR / RPP / DWA
+      controller_name: "TEB" # 算法名称，可选 PID / LQR / RPP / DWA / TEB
 
       heading_aligner:
         enable_start_alignment: false # 起步时是否先原地对齐预瞄点方向
@@ -152,3 +152,38 @@ controller_server:
         oscillation_reset_dist: 0.05 # 移动超过该距离后重置振荡状态 [m]
         oscillation_reset_angle: 0.2 # 转过该角度后重置振荡状态 [rad]
         oscillation_min_angular_velocity: 0.2 # 小于该角速度不记录振荡方向 [rad/s]
+
+      TEB:
+        control_frequency: 20.0 # 控制器内部计算频率 [Hz]
+        max_linear_velocity: 1.0 # 最大线速度 [m/s]
+        min_linear_velocity: 0.0 # 最小线速度 [m/s]
+        max_linear_velocity_increment: 0.02 # 单周期最大线速度增量 [m/s]
+        max_angular_velocity: 1.2 # 最大角速度 [rad/s]
+        min_angular_velocity: 0.0 # 最小角速度 [rad/s]
+        max_angular_velocity_increment: 0.2 # 单周期最大角速度增量 [rad/s]
+        max_linear_acceleration: 0.5 # 最大线加速度 [m/s^2]
+        max_angular_acceleration: 1.5 # 最大角加速度 [rad/s^2]
+
+        dt_ref: 0.4 # teb 相邻时序节点的目标时间间隔 [s]
+        dt_hysteresis: 0.15 # 节点时间间隔重采样滞回 [s]
+        min_samples: 3 # teb 最少离散姿态数量
+        max_samples: 10 # teb 最多离散姿态数量
+        teb_length_scale: 1.0 # 从全局路径截取局部 teb 初值的长度系数
+        local_goal_distance: 1.5 # 本地优化视野长度 [m]
+        max_iterations: 3 # 每控制周期内部优化迭代次数
+        feasibility_check_poses: 5 # 可行性检测时抽查的轨迹点数量
+        convergence_epsilon: 0.001 # 相邻两轮总代价变化小于该值时提前收敛
+
+        weight_kinematics: 1.0 # 非完整运动学约束权重
+        weight_velocity: 1.0 # 速度约束权重
+        weight_acceleration: 1.0 # 加速度约束权重
+        weight_obstacle: 1.0 # 障碍物距离约束权重
+        weight_time: 0.8 # 时间最优项权重
+        weight_goal: 2.5 # 终点贴合权重
+        weight_smoothness: 0.8 # 轨迹平滑项权重
+        weight_goal_heading: 1.5 # 终点朝向约束权重
+
+        min_obstacle_distance: 0.18 # teb 轨迹与障碍物的最小安全距离 [m]
+        robot_radius: 0.18 # 简化碰撞检测使用的机器人半径 [m]
+        unknown_as_obstacle: false # 是否将未知区域按障碍处理
+        allow_backward_motion: false # 第一版是否允许倒车

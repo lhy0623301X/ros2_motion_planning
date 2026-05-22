@@ -11,6 +11,7 @@
 #include "lqr_controller/lqr_controller.h"
 #include "pid_controller/pid_controller.h"
 #include "rpp_controller/rpp_controller.h"
+#include "teb_controller/teb_controller.h"
 
 namespace rmp::controller {
 
@@ -44,6 +45,9 @@ std::shared_ptr<ControllerAlgorithm> ControllerFactory::create(
   }
   if (normalized_name == "dwa" || normalized_name == "dwacontroller") {
     return std::make_shared<DWAController>();
+  }
+  if (normalized_name == "teb" || normalized_name == "tebcontroller") {
+    return std::make_shared<TEBController>();
   }
   return nullptr;
 }

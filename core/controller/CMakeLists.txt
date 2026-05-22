@@ -9,6 +9,7 @@ find_package(ament_cmake REQUIRED)
 find_package(common REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(PkgConfig REQUIRED)
 find_package(nav2_core REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -19,6 +20,15 @@ find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
+
+find_library(G2O_CORE_LIB g2o_core PATHS /opt/ros/humble/lib/x86_64-linux-gnu REQUIRED)
+find_library(G2O_STUFF_LIB g2o_stuff PATHS /opt/ros/humble/lib/x86_64-linux-gnu REQUIRED)
+find_library(
+  G2O_SOLVER_CSPARSE_LIB g2o_solver_csparse
+  PATHS /opt/ros/humble/lib/x86_64-linux-gnu REQUIRED)
+find_library(
+  G2O_CSPARSE_EXTENSION_LIB g2o_csparse_extension
+  PATHS /opt/ros/humble/lib/x86_64-linux-gnu REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/controller_algorithm.cpp
@@ -31,6 +41,9 @@ add_library(${PROJECT_NAME} SHARED
   src/lqr_controller/lqr_controller.cpp
   src/pid_controller/pid_controller.cpp
   src/rpp_controller/rpp_controller.cpp
+  src/teb_controller/teb_controller.cpp
+  src/teb_controller/teb_optimizer.cpp
+  src/teb_controller/teb_visualizer.cpp
   src/utils/curvature_speed_limiter.cpp
   src/utils/heading_aligner.cpp
   src/utils/lookahead_point_publisher.cpp
@@ -41,6 +54,15 @@ target_include_directories(${PROJECT_NAME}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
     ${EIGEN3_INCLUDE_DIR}
+    /opt/ros/humble/include
+    /usr/include/suitesparse
+)
+
+target_link_libraries(${PROJECT_NAME}
+  ${G2O_CORE_LIB}
+  ${G2O_STUFF_LIB}
+  ${G2O_SOLVER_CSPARSE_LIB}
+  ${G2O_CSPARSE_EXTENSION_LIB}
 )
 
 ament_target_dependencies(${PROJECT_NAME}
@@ -82,6 +104,7 @@ install(
     src/lqr_controller
     src/pid_controller
     src/rpp_controller
+    src/teb_controller
     src/utils
   DESTINATION include/${PROJECT_NAME}
   FILES_MATCHING PATTERN "*.h"

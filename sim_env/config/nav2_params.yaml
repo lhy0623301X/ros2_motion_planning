@@ -122,7 +122,7 @@ planner_server:
       enable_log: true                   # 是否开启算法内部日志宏输出
       enable_path_reuse: true            # 是否启用路径复用逻辑
       goal_reuse_tolerance: 0.2          # 只有当前目标与上一帧目标足够接近时，才允许复用旧路径
-      replanning_distance: 0.5           # 若当前位置距离上一帧路径最近点小于该阈值，则优先复用旧路径
+      replanning_distance: 10.0           # 若当前位置距离上一帧路径最近点小于该阈值，则优先复用旧路径
       obstacle_cost_weight: 3.0          # 障碍物邻近代价权重，越大越倾向于远离障碍物
       planning_safety_margin: 0.25       # 规划额外安全边界[m]，所有算法统一使用
       enable_path_smoother: true        # 是否对全局路径做曲线平滑
@@ -244,8 +244,8 @@ local_costmap:
       global_frame: odom          # 代价地图所在的坐标系
       robot_base_frame: base_footprint  # 机器人基座坐标系
       rolling_window: true        # 是否以机器人为中心滚动窗口
-      width: 3                    # 地图宽度 [m]
-      height: 3                   # 地图高度 [m]
+      width: 6                    # 地图宽度 [m]
+      height: 6                   # 地图高度 [m]
       resolution: 0.05            # 地图分辨率 [m/像素]，越小越精细但计算量越大
       robot_radius: 0.22          # 机器人外接圆半径 [m]，用于代价膨胀
       plugins: ["voxel_layer", "inflation_layer"]   # 代价图层插件列表
