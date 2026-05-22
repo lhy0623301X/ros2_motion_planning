@@ -172,6 +172,7 @@ controller_server:
         local_goal_distance: 1.5 # 本地优化视野长度 [m]
         max_iterations: 3 # 每控制周期内部优化迭代次数
         feasibility_check_poses: 5 # 可行性检测时抽查的轨迹点数量
+        enable_final_feasibility_check: false # 是否在候选轨迹优化后执行最终 feasibility 硬碰撞检测
         convergence_epsilon: 0.001 # 相邻两轮总代价变化小于该值时提前收敛
 
         weight_kinematics: 1.0 # 非完整运动学约束权重
@@ -180,10 +181,17 @@ controller_server:
         weight_obstacle: 1.0 # 障碍物距离约束权重
         weight_time: 0.8 # 时间最优项权重
         weight_goal: 2.5 # 终点贴合权重
-        weight_smoothness: 0.8 # 轨迹平滑项权重
+        weight_smoothness: 20.0 # 轨迹平滑项权重
         weight_goal_heading: 1.5 # 终点朝向约束权重
 
         min_obstacle_distance: 0.18 # teb 轨迹与障碍物的最小安全距离 [m]
+        obstacle_inflation_distance: 0.55 # teb 膨胀区软约束影响范围 [m]，建议与 local_costmap inflation_radius 对齐
+        obstacle_hard_distance_weight: 10.0 # d < min_obstacle_distance 时的分段二次惩罚权重
+        obstacle_soft_distance_weight: 5.0 # min_obstacle_distance <= d < obstacle_inflation_distance 时的分段二次惩罚权重
+        candidate_offset_step: 0.4 # 生成左右候选 reference band 时的横向偏移步长 [m]
+        candidate_max_offset: 1.2 # 生成左右候选 reference band 时允许尝试的最大横向偏移 [m]
+        candidate_full_offset_progress: 0.25 # 候选 band 在前 25% 距离内达到完整横向偏移，帮助近起点绕障
         robot_radius: 0.18 # 简化碰撞检测使用的机器人半径 [m]
+        debug_candidate_bands: true # 打印 TEB 左右候选生成、优化结果和选择过程的详细日志
         unknown_as_obstacle: false # 是否将未知区域按障碍处理
         allow_backward_motion: false # 第一版是否允许倒车

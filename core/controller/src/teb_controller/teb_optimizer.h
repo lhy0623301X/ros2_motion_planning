@@ -60,6 +60,26 @@ private:
     const geometry_msgs::msg::PoseStamped & robot_pose,
     const TEBControllerConfig & cfg,
     const nav2_costmap_2d::Costmap2D * costmap) const;
+  TEBTrajectory initializeTrajectoryFromReferences(
+    const std::vector<TEBPose> & references,
+    const TEBControllerConfig & cfg) const;
+  std::vector<std::vector<TEBPose>> buildCandidateReferenceBands(
+    const std::vector<TEBPose> & center_references,
+    nav2_costmap_2d::Costmap2D & costmap,
+    const TEBControllerConfig & cfg) const;
+  std::vector<TEBPose> offsetReferenceBand(
+    const std::vector<TEBPose> & references,
+    double side,
+    double offset_distance,
+    const TEBControllerConfig & cfg) const;
+  bool referenceBandHasHardCollision(
+    const std::vector<TEBPose> & references,
+    nav2_costmap_2d::Costmap2D & costmap,
+    const TEBControllerConfig & cfg) const;
+  bool isReferenceBandCandidateValid(
+    const std::vector<TEBPose> & references,
+    nav2_costmap_2d::Costmap2D & costmap,
+    const TEBControllerConfig & cfg) const;
   void updateTimedElasticBand(
     TEBTrajectory & trajectory,
     const std::vector<TEBPose> & references,

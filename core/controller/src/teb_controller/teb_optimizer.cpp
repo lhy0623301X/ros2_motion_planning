@@ -21,6 +21,7 @@
 #include "g2o/core/sparse_optimizer.h"
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
 #include "nav2_costmap_2d/cost_values.hpp"
+#include "rclcpp/rclcpp.hpp"
 #include "tf2/utils.h"
 
 namespace rmp::controller {
@@ -114,6 +115,9 @@ double computeObstaclePenaltyLocal(
         return nav2_costmap_2d::LETHAL_OBSTACLE;
       }
       const unsigned char cost = costmap.getCost(mx, my);
+      if (cost == nav2_costmap_2d::NO_INFORMATION && !cfg.unknown_as_obstacle) {
+        return nav2_costmap_2d::FREE_SPACE;
+      }
       if (cfg.unknown_as_obstacle && cost == nav2_costmap_2d::NO_INFORMATION) {
         set_reason("footprint sample is unknown and treated as obstacle");
         return nav2_costmap_2d::LETHAL_OBSTACLE;
@@ -173,11 +177,24 @@ double computeObstaclePenaltyLocal(
 
   const double normalized_cost = static_cast<double>(max_raw_cost) /
     static_cast<double>(nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE);
-  const double approximate_clearance =
-    (1.0 - std::min(normalized_cost, 1.0)) * cfg.min_obstacle_distance * 2.0;
-  const double safety_margin = cfg.min_obstacle_distance + cfg.robot_radius;
-  const double clearance_violation = std::max(0.0, safety_margin - approximate_clearance);
-  return normalized_cost + clearance_violation * clearance_violation;
+  const double d_inflation = std::max(cfg.obstacle_inflation_distance, cfg.min_obstacle_distance);
+  const double approximate_distance =
+    (1.0 - std::min(normalized_cost, 1.0)) * d_inflation;
+  if (approximate_distance >= d_inflation) {
+    return 0.0;
+  }
+
+  const double hard_weight = std::max(cfg.obstacle_hard_distance_weight, 0.0);
+  const double soft_weight = std::max(cfg.obstacle_soft_distance_weight, 0.0);
+  const double continuity_offset =
+    soft_weight * std::pow(d_inflation - cfg.min_obstacle_distance, 2.0);
+  if (approximate_distance < cfg.min_obstacle_distance) {
+    const double violation = cfg.min_obstacle_distance - approximate_distance;
+    return hard_weight * violation * violation + continuity_offset;
+  }
+
+  const double soft_violation = d_inflation - approximate_distance;
+  return soft_weight * soft_violation * soft_violation;
 }
 
 class VertexPose2D : public g2o::BaseVertex<3, Eigen::Vector3d>
@@ -472,10 +489,17 @@ TEBTrajectory TEBOptimizer::initializeTrajectory(
   const TEBControllerConfig & cfg,
   const nav2_costmap_2d::Costmap2D * costmap) const
 {
-  TEBTrajectory trajectory;
   // 初始化阶段只负责给图优化准备一个“合理初值”：
   // 沿当前局部路径截取一小段，重采样成参考带，再为每个段分配初始 dt。
   const auto references = buildReferenceBand(global_plan, robot_pose, cfg, costmap);
+  return initializeTrajectoryFromReferences(references, cfg);
+}
+
+TEBTrajectory TEBOptimizer::initializeTrajectoryFromReferences(
+  const std::vector<TEBPose> & references,
+  const TEBControllerConfig & cfg) const
+{
+  TEBTrajectory trajectory;
   if (references.empty()) {
     return trajectory;
   }
@@ -505,11 +529,6 @@ TEBOptimizationSummary TEBOptimizer::optimize(
   const TEBControllerConfig & cfg) const
 {
   TEBOptimizationSummary summary;
-  summary.initialized = !trajectory.states.empty();
-  if (!summary.initialized) {
-    return summary;
-  }
-
   auto * costmap = costmap_ros.getCostmap();
   if (costmap == nullptr) {
     return summary;
@@ -521,175 +540,262 @@ TEBOptimizationSummary TEBOptimizer::optimize(
   robot_pose.pose.position.y = state.y;
   robot_pose.pose.orientation.z = std::sin(state.theta * 0.5);
   robot_pose.pose.orientation.w = std::cos(state.theta * 0.5);
-  const auto references = buildReferenceBand(global_plan, robot_pose, cfg, costmap);
 
-  // 在正式建图前先做一次离散密度和朝向刷新，避免图初值太差。
-  resizeTrajectory(trajectory, cfg);
-  refreshOrientations(trajectory);
-
-  // 下面开始搭建 g2o 图：
-  // - pose 顶点: band 上的离散几何状态
-  // - dt 顶点:   相邻 pose 之间的时间间隔
-  //
-  // 求解器选择 LM + 稀疏线性求解。
-  g2o::SparseOptimizer optimizer;
-  optimizer.setVerbose(false);
-
-  auto linear_solver =
-    std::make_unique<g2o::LinearSolverCSparse<g2o::BlockSolverX::PoseMatrixType>>();
-  auto block_solver = std::make_unique<g2o::BlockSolverX>(std::move(linear_solver));
-  optimizer.setAlgorithm(new g2o::OptimizationAlgorithmLevenberg(std::move(block_solver)));
-
-  std::vector<VertexPose2D *> pose_vertices;
-  std::vector<VertexTimeDiff *> dt_vertices;
-  pose_vertices.reserve(trajectory.states.size());
-  dt_vertices.reserve(trajectory.states.size() > 1U ? trajectory.states.size() - 1U : 0U);
-
-  int next_id = 0;
-  for (std::size_t i = 0; i < trajectory.states.size(); ++i) {
-    auto * vertex = new VertexPose2D();
-    vertex->setId(next_id++);
-    vertex->setEstimate(Eigen::Vector3d(
-      trajectory.states[i].pose.x,
-      trajectory.states[i].pose.y,
-      trajectory.states[i].pose.theta));
-    // 第一个 pose 固定在当前机器人位姿，相当于整条 TEB 的锚点。
-    vertex->setFixed(i == 0U);
-    optimizer.addVertex(vertex);
-    pose_vertices.push_back(vertex);
+  const auto center_references = buildReferenceBand(global_plan, robot_pose, cfg, costmap);
+  const auto reference_candidates = buildCandidateReferenceBands(center_references, *costmap, cfg);
+  const auto logger = rclcpp::get_logger("TEBOptimizer");
+  if (cfg.debug_candidate_bands) {
+    RCLCPP_INFO(
+      logger,
+      "[TEB candidates] center_refs=%zu candidates=%zu robot=(%.3f, %.3f, %.3f)",
+      center_references.size(), reference_candidates.size(), state.x, state.y, state.theta);
   }
+  bool has_candidate_result = false;
+  TEBTrajectory best_trajectory;
+  TEBOptimizationSummary best_summary;
+  double best_score = std::numeric_limits<double>::infinity();
 
-  // dt 顶点比 pose 顶点少一个：每个 dt 表示 pose_i -> pose_{i+1} 的时间。
-  for (std::size_t i = 1; i < trajectory.states.size(); ++i) {
-    auto * vertex = new VertexTimeDiff();
-    vertex->setId(next_id++);
-    vertex->setEstimate(std::max(0.05, trajectory.states[i].dt));
-    optimizer.addVertex(vertex);
-    dt_vertices.push_back(vertex);
-  }
-
-  for (std::size_t i = 1; i < pose_vertices.size(); ++i) {
-    const auto reference = interpolateReference(
-      references,
-      static_cast<double>(i) * static_cast<double>(references.size() - 1) /
-      static_cast<double>(std::max<std::size_t>(pose_vertices.size() - 1, 1)));
-    auto * edge = new EdgePosePrior();
-    edge->setVertex(0, pose_vertices[i]);
-    edge->setMeasurement(Eigen::Vector3d(reference.x, reference.y, reference.theta));
-    Eigen::Matrix3d information = Eigen::Matrix3d::Zero();
-    information(0, 0) = cfg.weight_goal;
-    information(1, 1) = cfg.weight_goal;
-    // 中间点只弱约束朝向，末端点则更强地约束到局部目标姿态。
-    information(2, 2) = (i + 1 == pose_vertices.size()) ? cfg.weight_goal_heading : 0.15;
-    edge->setInformation(information);
-    optimizer.addEdge(edge);
-  }
-
-  // obstacle edge 不固定目标值，只通过 footprint 代价把顶点推离障碍。
-  // 起点是当前机器人位姿并且被固定，不能通过优化移动；末端局部目标也必须参与避障，
-  // 否则它被 reference prior 拉到障碍上时，只会在后续 feasibility check 里失败。
-  for (std::size_t i = 1; i < pose_vertices.size(); ++i) {
-    auto * edge = new EdgeObstacle(*costmap, footprint_, cfg);
-    edge->setVertex(0, pose_vertices[i]);
-    edge->setMeasurement(0.0);
-    edge->setInformation(Eigen::Matrix<double, 1, 1>::Identity() * cfg.weight_obstacle);
-    optimizer.addEdge(edge);
-  }
-
-  for (std::size_t i = 0; i + 1 < pose_vertices.size(); ++i) {
-    // Kinematics edge 不需要测量值，目标就是把误差压到 0。
-    auto * edge = new EdgeKinematics(cfg.allow_backward_motion);
-    edge->setVertex(0, pose_vertices[i]);
-    edge->setVertex(1, pose_vertices[i + 1]);
-    edge->setMeasurement(Eigen::Vector2d::Zero());
-    edge->setInformation(Eigen::Matrix2d::Identity() * cfg.weight_kinematics);
-    optimizer.addEdge(edge);
-  }
-
-  for (std::size_t i = 0; i < dt_vertices.size(); ++i) {
-    // 每段时间都希望接近 dt_ref，同时受速度 edge 联合影响，最终实现“时间弹性”。
-    auto * time_edge = new EdgeTimeRef();
-    time_edge->setVertex(0, dt_vertices[i]);
-    time_edge->setMeasurement(cfg.dt_ref);
-    time_edge->setInformation(Eigen::Matrix<double, 1, 1>::Identity() * cfg.weight_time);
-    optimizer.addEdge(time_edge);
-
-    auto * velocity_edge = new EdgeVelocity(
-      cfg.max_linear_velocity, cfg.max_angular_velocity, cfg.allow_backward_motion);
-    velocity_edge->setVertex(0, pose_vertices[i]);
-    velocity_edge->setVertex(1, pose_vertices[i + 1]);
-    velocity_edge->setVertex(2, dt_vertices[i]);
-    velocity_edge->setMeasurement(Eigen::Vector2d::Zero());
-    velocity_edge->setInformation(Eigen::Matrix2d::Identity() * cfg.weight_velocity);
-    optimizer.addEdge(velocity_edge);
-  }
-
-  for (std::size_t i = 0; i + 2 < pose_vertices.size(); ++i) {
-    // smoothness edge 和 acceleration edge 都跨越 3 个 pose。
-    // 前者管几何二阶平滑，后者管时域上的速度变化率。
-    auto * smooth_edge = new EdgeSmoothness();
-    smooth_edge->setVertex(0, pose_vertices[i]);
-    smooth_edge->setVertex(1, pose_vertices[i + 1]);
-    smooth_edge->setVertex(2, pose_vertices[i + 2]);
-    smooth_edge->setMeasurement(Eigen::Vector2d::Zero());
-    smooth_edge->setInformation(Eigen::Matrix2d::Identity() * cfg.weight_smoothness);
-    optimizer.addEdge(smooth_edge);
-
-    auto * acceleration_edge = new EdgeAcceleration(
-      cfg.max_linear_acceleration, cfg.max_angular_acceleration);
-    acceleration_edge->setVertex(0, pose_vertices[i]);
-    acceleration_edge->setVertex(1, pose_vertices[i + 1]);
-    acceleration_edge->setVertex(2, pose_vertices[i + 2]);
-    acceleration_edge->setVertex(3, dt_vertices[i]);
-    acceleration_edge->setVertex(4, dt_vertices[i + 1]);
-    acceleration_edge->setMeasurement(Eigen::Vector2d::Zero());
-    acceleration_edge->setInformation(Eigen::Matrix2d::Identity() * cfg.weight_acceleration);
-    optimizer.addEdge(acceleration_edge);
-  }
-
-  if (!pose_vertices.empty()) {
-    // 再额外加一条终点朝向 edge，保证末端姿态不会被中间点 prior 稀释掉。
-    auto * edge = new EdgeGoalHeading();
-    edge->setVertex(0, pose_vertices.back());
-    edge->setMeasurement(references.back().theta);
-    edge->setInformation(Eigen::Matrix<double, 1, 1>::Identity() * cfg.weight_goal_heading);
-    optimizer.addEdge(edge);
-  }
-
-  optimizer.initializeOptimization();
-  double previous_chi2 = std::numeric_limits<double>::infinity();
-  const int max_outer_iterations = std::max(cfg.max_iterations, 1);
-  // 每次只走一步 LM，然后手动检查 chi2 收敛，方便把外层节奏掌握在 controller 自己手里。
-  for (int i = 0; i < max_outer_iterations; ++i) {
-    optimizer.optimize(1);
-    const double chi2 = optimizer.chi2();
-    summary.iterations = i + 1;
-    if (std::fabs(previous_chi2 - chi2) < cfg.convergence_epsilon) {
-      previous_chi2 = chi2;
-      break;
+  std::size_t candidate_index = 0;
+  for (const auto & references : reference_candidates) {
+    const std::size_t current_candidate_index = candidate_index++;
+    auto candidate_trajectory = initializeTrajectoryFromReferences(references, cfg);
+    TEBOptimizationSummary candidate_summary;
+    candidate_summary.initialized = !candidate_trajectory.states.empty();
+    if (!candidate_summary.initialized) {
+      if (cfg.debug_candidate_bands) {
+        RCLCPP_INFO(
+          logger,
+          "[TEB candidates] candidate=%zu skipped: empty initialized trajectory refs=%zu",
+          current_candidate_index, references.size());
+      }
+      continue;
     }
-    previous_chi2 = chi2;
+
+    // 在正式建图前先做一次离散密度和朝向刷新，避免图初值太差。
+    resizeTrajectory(candidate_trajectory, cfg);
+    refreshOrientations(candidate_trajectory);
+    if (cfg.debug_candidate_bands) {
+      const auto & first = candidate_trajectory.states.front().pose;
+      const auto & last = candidate_trajectory.states.back().pose;
+      RCLCPP_INFO(
+        logger,
+        "[TEB candidates] candidate=%zu refs=%zu states_after_resize=%zu first=(%.3f, %.3f) last=(%.3f, %.3f)",
+        current_candidate_index, references.size(), candidate_trajectory.states.size(),
+        first.x, first.y, last.x, last.y);
+    }
+
+    // 下面开始搭建 g2o 图：
+    // - pose 顶点: band 上的离散几何状态
+    // - dt 顶点:   相邻 pose 之间的时间间隔
+    //
+    // 求解器选择 LM + 稀疏线性求解。
+    g2o::SparseOptimizer optimizer;
+    optimizer.setVerbose(false);
+
+    auto linear_solver =
+      std::make_unique<g2o::LinearSolverCSparse<g2o::BlockSolverX::PoseMatrixType>>();
+    auto block_solver = std::make_unique<g2o::BlockSolverX>(std::move(linear_solver));
+    optimizer.setAlgorithm(new g2o::OptimizationAlgorithmLevenberg(std::move(block_solver)));
+
+    std::vector<VertexPose2D *> pose_vertices;
+    std::vector<VertexTimeDiff *> dt_vertices;
+    pose_vertices.reserve(candidate_trajectory.states.size());
+    dt_vertices.reserve(
+      candidate_trajectory.states.size() > 1U ? candidate_trajectory.states.size() - 1U : 0U);
+
+    int next_id = 0;
+    for (std::size_t i = 0; i < candidate_trajectory.states.size(); ++i) {
+      auto * vertex = new VertexPose2D();
+      vertex->setId(next_id++);
+      vertex->setEstimate(Eigen::Vector3d(
+        candidate_trajectory.states[i].pose.x,
+        candidate_trajectory.states[i].pose.y,
+        candidate_trajectory.states[i].pose.theta));
+      // 第一个 pose 固定在当前机器人位姿，相当于整条 TEB 的锚点。
+      vertex->setFixed(i == 0U);
+      optimizer.addVertex(vertex);
+      pose_vertices.push_back(vertex);
+    }
+
+    // dt 顶点比 pose 顶点少一个：每个 dt 表示 pose_i -> pose_{i+1} 的时间。
+    for (std::size_t i = 1; i < candidate_trajectory.states.size(); ++i) {
+      auto * vertex = new VertexTimeDiff();
+      vertex->setId(next_id++);
+      vertex->setEstimate(std::max(0.05, candidate_trajectory.states[i].dt));
+      optimizer.addVertex(vertex);
+      dt_vertices.push_back(vertex);
+    }
+
+    for (std::size_t i = 1; i < pose_vertices.size(); ++i) {
+      const auto reference = interpolateReference(
+        references,
+        static_cast<double>(i) * static_cast<double>(references.size() - 1) /
+        static_cast<double>(std::max<std::size_t>(pose_vertices.size() - 1, 1)));
+      auto * edge = new EdgePosePrior();
+      edge->setVertex(0, pose_vertices[i]);
+      edge->setMeasurement(Eigen::Vector3d(reference.x, reference.y, reference.theta));
+      Eigen::Matrix3d information = Eigen::Matrix3d::Zero();
+      information(0, 0) = cfg.weight_goal;
+      information(1, 1) = cfg.weight_goal;
+      // 中间点只弱约束朝向，末端点则更强地约束到局部目标姿态。
+      information(2, 2) = (i + 1 == pose_vertices.size()) ? cfg.weight_goal_heading : 0.15;
+      edge->setInformation(information);
+      optimizer.addEdge(edge);
+    }
+
+    // obstacle edge 不固定目标值，只通过 footprint 代价把顶点推离障碍。
+    // 起点是当前机器人位姿并且被固定，不能通过优化移动；末端局部目标也必须参与避障，
+    // 否则它被 reference prior 拉到障碍上时，只会在后续 feasibility check 里失败。
+    for (std::size_t i = 1; i < pose_vertices.size(); ++i) {
+      auto * edge = new EdgeObstacle(*costmap, footprint_, cfg);
+      edge->setVertex(0, pose_vertices[i]);
+      edge->setMeasurement(0.0);
+      edge->setInformation(Eigen::Matrix<double, 1, 1>::Identity() * cfg.weight_obstacle);
+      optimizer.addEdge(edge);
+    }
+
+    for (std::size_t i = 0; i + 1 < pose_vertices.size(); ++i) {
+      // Kinematics edge 不需要测量值，目标就是把误差压到 0。
+      auto * edge = new EdgeKinematics(cfg.allow_backward_motion);
+      edge->setVertex(0, pose_vertices[i]);
+      edge->setVertex(1, pose_vertices[i + 1]);
+      edge->setMeasurement(Eigen::Vector2d::Zero());
+      edge->setInformation(Eigen::Matrix2d::Identity() * cfg.weight_kinematics);
+      optimizer.addEdge(edge);
+    }
+
+    for (std::size_t i = 0; i < dt_vertices.size(); ++i) {
+      // 每段时间都希望接近 dt_ref，同时受速度 edge 联合影响，最终实现“时间弹性”。
+      auto * time_edge = new EdgeTimeRef();
+      time_edge->setVertex(0, dt_vertices[i]);
+      time_edge->setMeasurement(cfg.dt_ref);
+      time_edge->setInformation(Eigen::Matrix<double, 1, 1>::Identity() * cfg.weight_time);
+      optimizer.addEdge(time_edge);
+
+      auto * velocity_edge = new EdgeVelocity(
+        cfg.max_linear_velocity, cfg.max_angular_velocity, cfg.allow_backward_motion);
+      velocity_edge->setVertex(0, pose_vertices[i]);
+      velocity_edge->setVertex(1, pose_vertices[i + 1]);
+      velocity_edge->setVertex(2, dt_vertices[i]);
+      velocity_edge->setMeasurement(Eigen::Vector2d::Zero());
+      velocity_edge->setInformation(Eigen::Matrix2d::Identity() * cfg.weight_velocity);
+      optimizer.addEdge(velocity_edge);
+    }
+
+    for (std::size_t i = 0; i + 2 < pose_vertices.size(); ++i) {
+      // smoothness edge 和 acceleration edge 都跨越 3 个 pose。
+      // 前者管几何二阶平滑，后者管时域上的速度变化率。
+      auto * smooth_edge = new EdgeSmoothness();
+      smooth_edge->setVertex(0, pose_vertices[i]);
+      smooth_edge->setVertex(1, pose_vertices[i + 1]);
+      smooth_edge->setVertex(2, pose_vertices[i + 2]);
+      smooth_edge->setMeasurement(Eigen::Vector2d::Zero());
+      smooth_edge->setInformation(Eigen::Matrix2d::Identity() * cfg.weight_smoothness);
+      optimizer.addEdge(smooth_edge);
+
+      auto * acceleration_edge = new EdgeAcceleration(
+        cfg.max_linear_acceleration, cfg.max_angular_acceleration);
+      acceleration_edge->setVertex(0, pose_vertices[i]);
+      acceleration_edge->setVertex(1, pose_vertices[i + 1]);
+      acceleration_edge->setVertex(2, pose_vertices[i + 2]);
+      acceleration_edge->setVertex(3, dt_vertices[i]);
+      acceleration_edge->setVertex(4, dt_vertices[i + 1]);
+      acceleration_edge->setMeasurement(Eigen::Vector2d::Zero());
+      acceleration_edge->setInformation(Eigen::Matrix2d::Identity() * cfg.weight_acceleration);
+      optimizer.addEdge(acceleration_edge);
+    }
+
+    if (!pose_vertices.empty()) {
+      // 再额外加一条终点朝向 edge，保证末端姿态不会被中间点 prior 稀释掉。
+      auto * edge = new EdgeGoalHeading();
+      edge->setVertex(0, pose_vertices.back());
+      edge->setMeasurement(references.back().theta);
+      edge->setInformation(Eigen::Matrix<double, 1, 1>::Identity() * cfg.weight_goal_heading);
+      optimizer.addEdge(edge);
+    }
+
+    optimizer.initializeOptimization();
+    double previous_chi2 = std::numeric_limits<double>::infinity();
+    const int max_outer_iterations = std::max(cfg.max_iterations, 1);
+    // 每次只走一步 LM，然后手动检查 chi2 收敛，方便把外层节奏掌握在 controller 自己手里。
+    for (int i = 0; i < max_outer_iterations; ++i) {
+      optimizer.optimize(1);
+      const double chi2 = optimizer.chi2();
+      candidate_summary.iterations = i + 1;
+      if (std::fabs(previous_chi2 - chi2) < cfg.convergence_epsilon) {
+        previous_chi2 = chi2;
+        break;
+      }
+      previous_chi2 = chi2;
+    }
+
+    // g2o 求解结束后，把顶点估计值回写成工程内部的 TEBTrajectory。
+    for (std::size_t i = 0; i < pose_vertices.size(); ++i) {
+      const auto & estimate = pose_vertices[i]->estimate();
+      candidate_trajectory.states[i].pose.x = estimate[0];
+      candidate_trajectory.states[i].pose.y = estimate[1];
+      candidate_trajectory.states[i].pose.theta = normalizeAngleLocal(estimate[2]);
+    }
+    for (std::size_t i = 0; i < dt_vertices.size(); ++i) {
+      candidate_trajectory.states[i + 1].dt = std::max(0.05, dt_vertices[i]->estimate());
+    }
+
+    refreshOrientations(candidate_trajectory);
+    // 这里的 total_cost 不是 g2o 内部 chi2 的原样暴露，
+    // 而是工程侧自己定义的一组可读代价汇总，便于后续调参和日志分析。
+    candidate_trajectory.total_cost =
+      computeTotalCost(candidate_trajectory, state, references, *costmap, cfg);
+    std::string candidate_failure_reason;
+    if (cfg.enable_final_feasibility_check) {
+      candidate_trajectory.feasible =
+        isTrajectoryFeasible(candidate_trajectory, costmap_ros, cfg, &candidate_failure_reason);
+    } else {
+      candidate_trajectory.feasible = true;
+      candidate_failure_reason = "final feasibility check disabled";
+    }
+    candidate_summary.total_cost = candidate_trajectory.total_cost;
+    candidate_summary.optimized = true;
+    candidate_summary.feasible = candidate_trajectory.feasible;
+
+    const double candidate_score = candidate_trajectory.total_cost +
+      (candidate_trajectory.feasible ? 0.0 : 1.0e6);
+    if (cfg.debug_candidate_bands) {
+      RCLCPP_INFO(
+        logger,
+        "[TEB candidates] candidate=%zu result feasible=%s reason='%s' iterations=%d total_cost=%.3f score=%.3f",
+        current_candidate_index,
+        candidate_trajectory.feasible ? "yes" : "no",
+        candidate_failure_reason.c_str(),
+        candidate_summary.iterations,
+        candidate_trajectory.total_cost,
+        candidate_score);
+    }
+    if (!has_candidate_result || candidate_score < best_score) {
+      has_candidate_result = true;
+      best_score = candidate_score;
+      best_trajectory = candidate_trajectory;
+      best_summary = candidate_summary;
+    }
   }
 
-  // g2o 求解结束后，把顶点估计值回写成工程内部的 TEBTrajectory。
-  for (std::size_t i = 0; i < pose_vertices.size(); ++i) {
-    const auto & estimate = pose_vertices[i]->estimate();
-    trajectory.states[i].pose.x = estimate[0];
-    trajectory.states[i].pose.y = estimate[1];
-    trajectory.states[i].pose.theta = normalizeAngleLocal(estimate[2]);
+  if (has_candidate_result) {
+    trajectory = best_trajectory;
+    summary = best_summary;
+    if (cfg.debug_candidate_bands) {
+      RCLCPP_INFO(
+        logger,
+        "[TEB candidates] selected feasible=%s states=%zu iterations=%d total_cost=%.3f score=%.3f",
+        summary.feasible ? "yes" : "no",
+        trajectory.states.size(),
+        summary.iterations,
+        summary.total_cost,
+        best_score);
+    }
+  } else if (cfg.debug_candidate_bands) {
+    RCLCPP_WARN(
+      logger,
+      "[TEB candidates] no candidate produced an optimization result");
   }
-  for (std::size_t i = 0; i < dt_vertices.size(); ++i) {
-    trajectory.states[i + 1].dt = std::max(0.05, dt_vertices[i]->estimate());
-  }
-
-  refreshOrientations(trajectory);
-  // 这里的 total_cost 不是 g2o 内部 chi2 的原样暴露，
-  // 而是工程侧自己定义的一组可读代价汇总，便于后续调参和日志分析。
-  trajectory.total_cost = computeTotalCost(trajectory, state, references, *costmap, cfg);
-  trajectory.feasible = isTrajectoryFeasible(trajectory, costmap_ros, cfg, nullptr);
-  summary.total_cost = trajectory.total_cost;
-  summary.optimized = true;
-  summary.feasible = trajectory.feasible;
   return summary;
 }
 
@@ -829,10 +935,12 @@ std::vector<TEBPose> TEBOptimizer::buildReferenceBand(
 
   const double costmap_resolution = costmap == nullptr ? 0.0 : costmap->getResolution();
   // local costmap 的 worldToMap() 只保证中心点在窗口内；footprint 边界采样还会向外扩一圈。
-  // 因此这里把可用窗口按 footprint 半径、安全距离和一个栅格裕量向内收缩，
-  // reference band 的末端只允许落在这个“可完整检测 footprint”的区域内。
+  // 同时 center reference band 之后还会生成左右横向偏移候选，因此末端不能贴着
+  // costmap 边界，否则大偏移候选的最后几个点会因为 footprint 越界被提前丢弃。
+  // 这里把可用窗口按 footprint 半径、安全距离、最大候选偏移和一个栅格裕量向内收缩。
+  const double candidate_offset_margin = std::max(cfg.candidate_max_offset, 0.0);
   const double costmap_margin =
-    footprint_radius + cfg.min_obstacle_distance + costmap_resolution;
+    footprint_radius + cfg.min_obstacle_distance + candidate_offset_margin + costmap_resolution;
   const double usable_min_x = costmap == nullptr ?
     -std::numeric_limits<double>::infinity() : costmap->getOriginX() + costmap_margin;
   const double usable_min_y = costmap == nullptr ?
@@ -915,6 +1023,182 @@ std::vector<TEBPose> TEBOptimizer::buildReferenceBand(
   }
 
   return references;
+}
+
+std::vector<std::vector<TEBPose>> TEBOptimizer::buildCandidateReferenceBands(
+  const std::vector<TEBPose> & center_references,
+  nav2_costmap_2d::Costmap2D & costmap,
+  const TEBControllerConfig & cfg) const
+{
+  std::vector<std::vector<TEBPose>> candidates;
+  if (center_references.empty()) {
+    return candidates;
+  }
+
+  candidates.push_back(center_references);
+  const auto logger = rclcpp::get_logger("TEBOptimizer");
+  auto findHardCollision = [&](const std::vector<TEBPose> & references,
+      std::size_t * collision_index,
+      std::string * collision_reason) {
+      for (std::size_t i = 0; i < references.size(); ++i) {
+        std::string reason;
+        (void)obstaclePenalty(references[i], costmap, cfg, &reason);
+        if (!reason.empty()) {
+          if (collision_index != nullptr) {
+            *collision_index = i;
+          }
+          if (collision_reason != nullptr) {
+            *collision_reason = reason;
+          }
+          return true;
+        }
+      }
+      if (collision_reason != nullptr) {
+        collision_reason->clear();
+      }
+      return false;
+    };
+
+  std::size_t center_collision_index = 0;
+  std::string center_collision_reason;
+  const bool center_has_hard_collision = findHardCollision(
+    center_references, &center_collision_index, &center_collision_reason);
+  if (cfg.debug_candidate_bands) {
+    const auto & first = center_references.front();
+    const auto & last = center_references.back();
+    RCLCPP_INFO(
+      logger,
+      "[TEB candidates] center check refs=%zu first=(%.3f, %.3f) last=(%.3f, %.3f) hard_collision=%s index=%zu reason='%s'",
+      center_references.size(), first.x, first.y, last.x, last.y,
+      center_has_hard_collision ? "yes" : "no",
+      center_collision_index,
+      center_collision_reason.c_str());
+  }
+
+  // 只在中心 reference band 与 hard obstacle 冲突时生成左右候选，平时保持单候选以控制开销。
+  if (!center_has_hard_collision) {
+    return candidates;
+  }
+
+  auto addFirstCollisionFreeCandidate = [&](double side) {
+      const char * side_name = side > 0.0 ? "left" : "right";
+      const double offset_step = std::max(cfg.candidate_offset_step, 1.0e-3);
+      const double max_offset = std::max(cfg.candidate_max_offset, offset_step);
+      for (double offset = offset_step; offset <= max_offset + 1.0e-9; offset += offset_step) {
+        const auto candidate = offsetReferenceBand(center_references, side, offset, cfg);
+        // 左右候选按步长逐步外扩：只要还发生 hard collision，就继续尝试更大偏移。
+        std::size_t collision_index = 0;
+        std::string collision_reason;
+        const bool has_hard_collision = findHardCollision(
+          candidate, &collision_index, &collision_reason);
+        if (cfg.debug_candidate_bands) {
+          RCLCPP_INFO(
+            logger,
+            "[TEB candidates] side=%s offset=%.3f hard_collision=%s index=%zu reason='%s'",
+            side_name, offset,
+            has_hard_collision ? "yes" : "no",
+            collision_index,
+            collision_reason.c_str());
+        }
+        if (has_hard_collision) {
+          continue;
+        }
+        // 过滤阶段只关心候选是否仍在 local costmap 内，hard collision 已由上面的逐步检查处理。
+        if (isReferenceBandCandidateValid(candidate, costmap, cfg)) {
+          candidates.push_back(candidate);
+          if (cfg.debug_candidate_bands) {
+            RCLCPP_INFO(
+              logger,
+              "[TEB candidates] side=%s accepted offset=%.3f candidates_now=%zu",
+              side_name, offset, candidates.size());
+          }
+          return;
+        }
+        if (cfg.debug_candidate_bands) {
+          RCLCPP_INFO(
+            logger,
+            "[TEB candidates] side=%s rejected offset=%.3f: candidate leaves local costmap",
+            side_name, offset);
+        }
+      }
+      if (cfg.debug_candidate_bands) {
+        RCLCPP_INFO(
+          logger,
+          "[TEB candidates] side=%s no collision-free valid candidate up to max_offset=%.3f",
+          side_name, max_offset);
+      }
+    };
+
+  addFirstCollisionFreeCandidate(1.0);
+  addFirstCollisionFreeCandidate(-1.0);
+
+  return candidates;
+}
+
+std::vector<TEBPose> TEBOptimizer::offsetReferenceBand(
+  const std::vector<TEBPose> & references,
+  double side,
+  double offset_distance,
+  const TEBControllerConfig & cfg) const
+{
+  auto candidate = references;
+  if (candidate.size() < 3U) {
+    return candidate;
+  }
+
+  const double denominator = static_cast<double>(candidate.size() - 1U);
+  const double full_offset_progress = clamp(cfg.candidate_full_offset_progress, 1.0e-3, 1.0);
+  for (std::size_t i = 1; i < candidate.size(); ++i) {
+    const auto & prev = references[i - 1U];
+    const auto & next = i + 1U < references.size() ? references[i + 1U] : references[i];
+    const double tangent = segmentHeading(prev, next);
+    // 起点固定在机器人当前位置；靠近起点的候选点更快达到完整偏移，
+    // 这样 state 1/2 附近发生碰撞时，左右候选仍有足够横向空间绕开。
+    // 末端也保持完整偏移，避免局部目标处被拉回中心线。
+    const double progress = static_cast<double>(i) / denominator;
+    const double early_envelope = std::min(1.0, progress / full_offset_progress);
+    const double smooth_envelope = std::sin(M_PI * progress);
+    const double envelope = std::max({early_envelope, smooth_envelope, progress});
+    const double offset = offset_distance * envelope;
+    candidate[i].x = references[i].x - std::sin(tangent) * side * offset;
+    candidate[i].y = references[i].y + std::cos(tangent) * side * offset;
+    candidate[i].theta = references[i].theta;
+  }
+  return candidate;
+}
+
+bool TEBOptimizer::referenceBandHasHardCollision(
+  const std::vector<TEBPose> & references,
+  nav2_costmap_2d::Costmap2D & costmap,
+  const TEBControllerConfig & cfg) const
+{
+  for (const auto & pose : references) {
+    std::string collision_reason;
+    (void)obstaclePenalty(pose, costmap, cfg, &collision_reason);
+    if (!collision_reason.empty()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool TEBOptimizer::isReferenceBandCandidateValid(
+  const std::vector<TEBPose> & references,
+  nav2_costmap_2d::Costmap2D & costmap,
+  const TEBControllerConfig &) const
+{
+  if (references.empty()) {
+    return false;
+  }
+
+  for (std::size_t i = 1; i < references.size(); ++i) {
+    unsigned int mx = 0;
+    unsigned int my = 0;
+    if (!costmap.worldToMap(references[i].x, references[i].y, mx, my)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void TEBOptimizer::updateTimedElasticBand(

@@ -34,6 +34,7 @@ struct TEBControllerConfig
   // Optimization controls.
   int max_iterations{5};
   int feasibility_check_poses{5};
+  bool enable_final_feasibility_check{true};
   double convergence_epsilon{1.0e-3};
 
   // Cost weights.
@@ -48,7 +49,14 @@ struct TEBControllerConfig
 
   // Collision and obstacle handling.
   double min_obstacle_distance{0.25};
+  double obstacle_inflation_distance{0.55};
+  double obstacle_hard_distance_weight{10.0};
+  double obstacle_soft_distance_weight{1.0};
+  double candidate_offset_step{0.2};
+  double candidate_max_offset{1.0};
+  double candidate_full_offset_progress{0.25};
   double robot_radius{0.18};
+  bool debug_candidate_bands{false};
   bool unknown_as_obstacle{false};
   bool allow_backward_motion{false};
 };

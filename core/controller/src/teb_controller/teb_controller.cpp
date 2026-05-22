@@ -194,6 +194,8 @@ void TEBController::readParameters()
     parameter_prefix_ + "max_iterations", cfg_.max_iterations);
   cfg_.feasibility_check_poses = node_->declare_parameter<int>(
     parameter_prefix_ + "feasibility_check_poses", cfg_.feasibility_check_poses);
+  cfg_.enable_final_feasibility_check = node_->declare_parameter<bool>(
+    parameter_prefix_ + "enable_final_feasibility_check", cfg_.enable_final_feasibility_check);
   cfg_.convergence_epsilon = node_->declare_parameter<double>(
     parameter_prefix_ + "convergence_epsilon", cfg_.convergence_epsilon);
 
@@ -216,8 +218,22 @@ void TEBController::readParameters()
 
   cfg_.min_obstacle_distance = node_->declare_parameter<double>(
     parameter_prefix_ + "min_obstacle_distance", cfg_.min_obstacle_distance);
+  cfg_.obstacle_inflation_distance = node_->declare_parameter<double>(
+    parameter_prefix_ + "obstacle_inflation_distance", cfg_.obstacle_inflation_distance);
+  cfg_.obstacle_hard_distance_weight = node_->declare_parameter<double>(
+    parameter_prefix_ + "obstacle_hard_distance_weight", cfg_.obstacle_hard_distance_weight);
+  cfg_.obstacle_soft_distance_weight = node_->declare_parameter<double>(
+    parameter_prefix_ + "obstacle_soft_distance_weight", cfg_.obstacle_soft_distance_weight);
+  cfg_.candidate_offset_step = node_->declare_parameter<double>(
+    parameter_prefix_ + "candidate_offset_step", cfg_.candidate_offset_step);
+  cfg_.candidate_max_offset = node_->declare_parameter<double>(
+    parameter_prefix_ + "candidate_max_offset", cfg_.candidate_max_offset);
+  cfg_.candidate_full_offset_progress = node_->declare_parameter<double>(
+    parameter_prefix_ + "candidate_full_offset_progress", cfg_.candidate_full_offset_progress);
   cfg_.robot_radius = node_->declare_parameter<double>(
     parameter_prefix_ + "robot_radius", cfg_.robot_radius);
+  cfg_.debug_candidate_bands = node_->declare_parameter<bool>(
+    parameter_prefix_ + "debug_candidate_bands", cfg_.debug_candidate_bands);
   cfg_.unknown_as_obstacle = node_->declare_parameter<bool>(
     parameter_prefix_ + "unknown_as_obstacle", cfg_.unknown_as_obstacle);
   cfg_.allow_backward_motion = node_->declare_parameter<bool>(
