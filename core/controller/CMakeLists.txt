@@ -9,6 +9,7 @@ find_package(ament_cmake REQUIRED)
 find_package(common REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(OsqpEigen REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(nav2_core REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
@@ -39,6 +40,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dwa_controller/dwa_motion.cpp
   src/dwa_controller/dwa_visualizer.cpp
   src/lqr_controller/lqr_controller.cpp
+  src/mpc_controller/mpc_controller.cpp
   src/pid_controller/pid_controller.cpp
   src/rpp_controller/rpp_controller.cpp
   src/teb_controller/teb_controller.cpp
@@ -63,6 +65,13 @@ target_link_libraries(${PROJECT_NAME}
   ${G2O_STUFF_LIB}
   ${G2O_SOLVER_CSPARSE_LIB}
   ${G2O_CSPARSE_EXTENSION_LIB}
+  OsqpEigen::OsqpEigen
+)
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  BUILD_RPATH "/usr/local/lib"
+  INSTALL_RPATH "/usr/local/lib"
+  INSTALL_RPATH_USE_LINK_PATH TRUE
 )
 
 ament_target_dependencies(${PROJECT_NAME}
@@ -102,6 +111,7 @@ install(
   DIRECTORY
     src/dwa_controller
     src/lqr_controller
+    src/mpc_controller
     src/pid_controller
     src/rpp_controller
     src/teb_controller

@@ -5,7 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /MarkerArray1
-        - /Marker1
+        - /Marker2
       Splitter Ratio: 0.5
     Tree Height: 671
   - Class: rviz_common/Selection
@@ -316,8 +316,7 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        dwa_best_trajectory: true
-        dwa_sampled_trajectories: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -362,7 +361,7 @@ Visualization Manager:
       Enabled: true
       Name: Marker
       Namespaces:
-        {}
+        lookahead_point: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -370,6 +369,19 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /lookahead_point
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        mpc_predicted_trajectory: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /mpc_predicted_trajectory
       Value: true
   Enabled: true
   Global Options:
@@ -409,16 +421,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 30.574024200439453
+      Distance: 28.84065818786621
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.882926881313324
-        Y: 0.06825655698776245
-        Z: -0.0033274274319410324
+        X: 0.11256911605596542
+        Y: -0.25078949332237244
+        Z: 0.08848384767770767
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
