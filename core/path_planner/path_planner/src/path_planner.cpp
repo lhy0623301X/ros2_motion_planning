@@ -131,7 +131,7 @@ nav_msgs::msg::Path PathPlanner::createPlan(
         last_path_.begin() + static_cast<std::ptrdiff_t>(replanning_decision.nearest_index),
         last_path_.end());
       last_path_ = reused_path;
-      return toNavPath(reused_path, goal.header.frame_id, goal.header.stamp);
+      return toNavPath(reused_path, goal.header.frame_id, start.header.stamp);
     }
   }
 
